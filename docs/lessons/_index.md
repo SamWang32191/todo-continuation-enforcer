@@ -4,4 +4,5 @@
 
 | Card | Scope | Tags | Date |
 |---|---|---|---|
+| `installed-package-plugin-smoke-test` | project | opencode, plugin, npm-pack, smoke-test, publish | 2026-03-28 |
 | `local-opencode-plugin-smoke-test` | project | opencode, plugin, smoke-test, local-dev, verification | 2026-03-28 |

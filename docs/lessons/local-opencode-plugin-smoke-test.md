@@ -5,7 +5,7 @@ scope: project
 tags: [opencode, plugin, smoke-test, local-dev, verification]
 source: retrospective
 confidence: 0.3
-related: []
+related: [[installed-package-plugin-smoke-test]]
 ---
 
 # Use a temporary XDG config to smoke-test local OpenCode plugins
@@ -18,7 +18,7 @@ related: []
 
 ## Lesson
 - 要做本地 plugin 載入 smoke test 時，優先建立暫時的 `XDG_CONFIG_HOME`。
-- 在暫時 config 的 `opencode.json` 內寫入 `"plugin": ["file:///absolute/path/to/dist/index.js"]`，再執行 `opencode run --print-logs --log-level DEBUG ...`。
+- 在暫時 config 的 `$XDG_CONFIG_HOME/opencode/opencode.json` 內寫入 `"plugin": ["file:///absolute/path/to/dist/index.js"]`，再執行 `opencode run --print-logs --log-level DEBUG ...`。
 - 用日誌中的 `service=plugin path=file:///... loading plugin` 當作 plugin 已被 host 載入的證據。
 
 ## When to Apply
