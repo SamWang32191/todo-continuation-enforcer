@@ -120,13 +120,13 @@ workflow 需要明確區分三種狀態：
   - `bun run typecheck`
   - `bun test`
   - `bun run build`
-  - `npm pack --dry-run`
 - 將 `package.json` version 設為輸入版本
+- 執行 `npm pack --dry-run`
 - 組出 release notes 檔
 - 建立 release commit：`chore: release vX.Y.Z`
 - 建立 local tag：`vX.Y.Z`
 - 非 dry-run 時：
-  - 清理殘留 npm token 設定
+  - 清理 `NODE_AUTH_TOKEN` / `NPM_TOKEN`，並對 repo-level `.npmrc` 的 auth token 設定 fail-fast
   - `npm publish --provenance --access public --registry=https://registry.npmjs.org/`
 - 以單一 atomic push 將 release commit 與 tag 一起推到 `origin`
   - `gh release create vX.Y.Z --verify-tag`
@@ -136,20 +136,22 @@ workflow 需要明確區分三種狀態：
 非 dry-run 的精確順序如下：
 
 1. 驗證 branch / HEAD / version / release state
-2. 跑 install / typecheck / test / build / `npm pack --dry-run`
-3. 用 `npm version <version> --no-git-tag-version` 更新 `package.json`
-4. 建立 release body
-5. 建立 local release commit
-6. 建立 local tag
-7. 執行 `npm publish --provenance --access public --registry=https://registry.npmjs.org/`
-8. 執行單一 `git push --atomic origin HEAD:main refs/tags/vX.Y.Z`
-9. 執行 `gh release create vX.Y.Z --verify-tag --notes-file ...`
+2. 跑 install / typecheck / test / build
+3. 以 no-lifecycle 方式更新 `package.json` version
+4. 執行 `npm pack --dry-run`
+5. 建立 release body
+6. 建立 local release commit
+7. 建立 local tag
+8. 執行 `npm publish --provenance --access public --registry=https://registry.npmjs.org/`
+9. 執行單一 `git push --atomic origin HEAD:main refs/tags/vX.Y.Z`
+10. 執行 `gh release create vX.Y.Z --verify-tag --notes-file ...`
 
 ### Why this order
 
 - `npm publish` 前先建立 local commit/tag，可確保發布內容對應到明確的 git 狀態。
 - 先 publish、再 push commit/tag，雖然仍非交易式，但比「先推 main、publish 失敗」更能避免主線進入未發布版本。
 - commit 與 tag 一起 atomic push，可減少「commit 已推但 tag 未推」的中間狀態。
+- `npm pack --dry-run` 必須放在 version bump 後，才能驗證最終 release version 的封包內容。
 
 ## Partial Failure / Recovery Policy
 
@@ -196,7 +198,7 @@ release 前固定執行：
 - `bun run typecheck`
 - `bun test`
 - `bun run build`
-- `npm pack --dry-run`
+- `npm pack --dry-run`（在 `package.json` version 更新後執行）
 
 不加入 `lint`，因為目前 repo 未提供對應 script。
 
@@ -207,8 +209,9 @@ release 前固定執行：
 `dry_run: true` 時仍需：
 
 - 驗證版本規則與 release state
-- 跑 typecheck/test/build/`npm pack --dry-run`
+- 跑 install/typecheck/test/build
 - 在 runner 上更新 `package.json` version
+- 執行 `npm pack --dry-run`
 - 在 runner 上建立 local release commit、local tag 與 release body
 
 但不得：
@@ -225,7 +228,7 @@ release 前固定執行：
 - 使用 GitHub 提供的 `github.token` 建立 release 與 push 內容
 - repository 的 branch protection 必須允許 workflow 使用 `GITHUB_TOKEN` push 到 `main`，否則此設計無法運作
 - npm 端必須已配置 trusted publishing / provenance，讓 GitHub Actions OIDC 能發布到 npm
-- workflow 內會先清理殘留 npm token 設定，再執行 publish，降低 runner 憑證干擾
+- workflow 內會先清理 `NODE_AUTH_TOKEN` / `NPM_TOKEN`，並對 repo-level `.npmrc` 的 auth token 設定 fail-fast，再執行 publish，降低 runner 憑證干擾
 - Bun 與 Node 版本固定為明確版本，而不是 `latest`
 
 ## Files To Add Or Modify

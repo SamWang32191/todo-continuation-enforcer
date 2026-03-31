@@ -4,5 +4,6 @@
 
 | Card | Scope | Tags | Date |
 |---|---|---|---|
+| `release-workflow-publish-preflight` | project | github-actions, release, npm, trusted-publishing, git-push | 2026-03-31 |
 | `installed-package-plugin-smoke-test` | project | opencode, plugin, npm-pack, smoke-test, publish | 2026-03-28 |
 | `local-opencode-plugin-smoke-test` | project | opencode, plugin, smoke-test, local-dev, verification | 2026-03-28 |
