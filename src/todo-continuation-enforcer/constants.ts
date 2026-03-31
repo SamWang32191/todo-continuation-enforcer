@@ -2,7 +2,8 @@ import { createSystemDirective } from "../shared/system-directive"
 
 export const HOOK_NAME = "todo-continuation-enforcer"
 export const DEFAULT_SKIP_AGENTS = ["prometheus", "compaction", "plan"]
-export const COUNTDOWN_SECONDS = 2
+export const COUNTDOWN_SECONDS = 5
+export const TOAST_DURATION_MS = 900
 export const ABORT_WINDOW_MS = 3_000
 export const COMPACTION_GUARD_MS = 60_000
 export const CONTINUATION_COOLDOWN_MS = 5_000

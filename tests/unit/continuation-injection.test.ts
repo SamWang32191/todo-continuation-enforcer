@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test"
 
+import { CONTINUATION_PROMPT } from "../../src/todo-continuation-enforcer/constants"
+import { createTodoContinuationEnforcer } from "../../src/todo-continuation-enforcer"
 import { injectContinuation } from "../../src/todo-continuation-enforcer/continuation-injection"
+import { createFakeBackgroundTaskProbe, createFakeLogger, createFakeSessionApi } from "../helpers/fakes"
 import type { SessionApi } from "../../src/plugin/adapters/session-api"
 
 describe("injectContinuation", () => {
@@ -32,5 +35,64 @@ describe("injectContinuation", () => {
     expect(prompt).toContain("[pending] pending")
     expect(prompt).toContain("[in_progress] progress")
     expect(prompt).not.toContain("[completed] done")
+  })
+
+  it("countdown 完成後 fresh recheck 通過時才會 inject continuation", async () => {
+    let getTodosCalls = 0
+    let getLatestMessageInfoCalls = 0
+    let injectCalls = 0
+
+    const sessionApi = {
+      async getTodos() {
+        getTodosCalls += 1
+        return [{ content: "finish", status: "pending", priority: "high" }]
+      },
+      async getLatestMessageInfo() {
+        getLatestMessageInfoCalls += 1
+        return { role: "assistant", agent: "sisyphus", model: { providerID: "openai", modelID: "gpt-5" } }
+      },
+      async injectPrompt() {
+        injectCalls += 1
+      },
+    }
+
+    const enforcer = createTodoContinuationEnforcer({
+      sessionApi,
+      logger: createFakeLogger(),
+      backgroundTaskProbe: createFakeBackgroundTaskProbe(),
+      countdownSeconds: 0.01,
+    })
+
+    await enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+
+    expect(getTodosCalls).toBe(2)
+    expect(getLatestMessageInfoCalls).toBe(2)
+    expect(injectCalls).toBe(1)
+  })
+
+  it("injectContinuation 會組出 TODO_CONTINUATION 與 remaining todos", async () => {
+    let prompt = ""
+
+    const sessionApi: SessionApi = {
+      async getTodos() {
+        return []
+      },
+      async getLatestMessageInfo() {
+        return undefined
+      },
+      async injectPrompt(_sessionID, nextPrompt) {
+        prompt = nextPrompt
+      },
+    }
+
+    await injectContinuation({
+      sessionID: "s1",
+      sessionApi,
+      todos: [{ content: "finish docs", status: "pending", priority: "high" }],
+    })
+
+    expect(prompt).toContain(CONTINUATION_PROMPT)
+    expect(prompt).toContain("Remaining todos")
+    expect(prompt).toContain("[pending] finish docs")
   })
 })

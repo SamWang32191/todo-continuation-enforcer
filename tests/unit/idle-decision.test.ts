@@ -24,6 +24,22 @@ describe("shouldContinueOnIdle", () => {
     expect(result.shouldInject).toBe(true)
   })
 
+  it("pending question 會阻擋", async () => {
+    const result = await shouldContinueOnIdle({
+      sessionID: "s1",
+      state: baseState(),
+      todos: [{ content: "finish", status: "pending", priority: "high" }],
+      now: 10_000,
+      hasPendingQuestion: true,
+      hasRunningBackgroundTask: false,
+      isContinuationStopped: false,
+      agent: "sisyphus",
+    })
+
+    expect(result.shouldInject).toBe(false)
+    expect(result.reason).toBe("pending_question")
+  })
+
   it("cooldown 會阻擋", async () => {
     const result = await shouldContinueOnIdle({
       sessionID: "s1",
