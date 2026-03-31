@@ -2,6 +2,14 @@ import type { PluginInput } from "@opencode-ai/plugin"
 
 import type { Todo, TodoStatus } from "../../todo-continuation-enforcer/types"
 
+export interface MessagePart {
+  type?: string
+  name?: string
+  toolName?: string
+  text?: string
+  prompt?: string
+}
+
 export interface MessageInfo {
   agent?: string
   model?: {
@@ -10,6 +18,7 @@ export interface MessageInfo {
   }
   tools?: Record<string, boolean>
   text?: string
+  parts?: MessagePart[]
   role?: "user" | "assistant"
   error?: { name?: string }
 }
@@ -34,11 +43,7 @@ type SdkMessage = {
     model?: { providerID?: string; modelID?: string }
     error?: { name?: string }
   }
-  parts?: Array<{
-    type?: string
-    text?: string
-    prompt?: string
-  }>
+  parts?: MessagePart[]
 }
 
 function isString(value: unknown): value is string {
@@ -74,7 +79,7 @@ function isTodoLike(value: unknown): value is Todo {
 }
 
 function isMessageInfoRecord(value: unknown): value is NonNullable<SdkMessage["info"]> {
-  if (!isRecord(value) || !isString(value.role) || !isString(value.agent)) {
+  if (!isRecord(value) || !isString(value.role)) {
     return false
   }
 
@@ -88,8 +93,18 @@ function isMessageInfoRecord(value: unknown): value is NonNullable<SdkMessage["i
     }
   }
 
-  if (value.error !== undefined && (!isRecord(value.error) || !isString(value.error.name))) {
+  if (value.agent !== undefined && !isString(value.agent)) {
     return false
+  }
+
+  if (value.error !== undefined && (!isRecord(value.error) || !isString(value.error.name))) {
+    if (!isRecord(value.error)) {
+      return false
+    }
+
+    if (value.error.name !== undefined && !isString(value.error.name)) {
+      return false
+    }
   }
 
   return true
@@ -99,12 +114,14 @@ function getMessageRole(role: string): MessageInfo["role"] {
   return role === "assistant" ? "assistant" : "user"
 }
 
-function isSdkMessagePart(value: unknown): value is { type: string; text?: string; prompt?: string } {
+function isSdkMessagePart(value: unknown): value is MessagePart {
   if (!isRecord(value) || !isString(value.type)) {
     return false
   }
 
-  return (value.text === undefined || isString(value.text))
+  return (value.name === undefined || isString(value.name))
+    && (value.toolName === undefined || isString(value.toolName))
+    && (value.text === undefined || isString(value.text))
     && (value.prompt === undefined || isString(value.prompt))
 }
 
@@ -152,6 +169,7 @@ function normalizeMessageInfo(message: SdkMessage | undefined): MessageInfo | un
       : undefined,
     error: message.info.error ? { name: message.info.error.name } : undefined,
     role: getMessageRole(role),
+    parts: message.parts,
     text,
   }
 }

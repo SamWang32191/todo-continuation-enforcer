@@ -65,4 +65,112 @@ describe("createSdkSessionApi runtime narrowing", () => {
       { content: "keep-progress", status: "in_progress", priority: "high" },
     ])
   })
+
+  it("latest message 會保留 parts", async () => {
+    const api = createSdkSessionApi({
+      client: {
+        session: {
+          todo: async () => ({ data: [] }),
+          messages: async () => ({
+            data: [{
+              info: {
+                role: "assistant",
+                agent: "sisyphus",
+                model: { providerID: "openai", modelID: "gpt-5" },
+              },
+              parts: [
+                { type: "tool", name: "question", toolName: "question", prompt: "Should I continue?" },
+                { type: "text", text: "keep going" },
+              ],
+            }],
+          }),
+          promptAsync: async () => ({ data: undefined }),
+        },
+      },
+      directory: "/tmp",
+      worktree: "/tmp",
+      project: {} as never,
+      serverUrl: new URL("http://localhost"),
+      $: {} as never,
+    })
+
+    await expect(api.getLatestMessageInfo("s1")).resolves.toEqual({
+      agent: "sisyphus",
+      model: { providerID: "openai", modelID: "gpt-5" },
+      parts: [
+        { type: "tool", name: "question", toolName: "question", prompt: "Should I continue?" },
+        { type: "text", text: "keep going" },
+      ],
+      role: "assistant",
+      text: "keep going",
+    })
+  })
+
+  it("缺 agent 但其他欄位合法時仍保留 message", async () => {
+    const api = createSdkSessionApi({
+      client: {
+        session: {
+          todo: async () => ({ data: [] }),
+          messages: async () => ({
+            data: [{
+              info: {
+                role: "assistant",
+                model: { providerID: "openai", modelID: "gpt-5" },
+              },
+              parts: [{ type: "text", text: "keep going" }],
+            }],
+          }),
+          promptAsync: async () => ({ data: undefined }),
+        },
+      },
+      directory: "/tmp",
+      worktree: "/tmp",
+      project: {} as never,
+      serverUrl: new URL("http://localhost"),
+      $: {} as never,
+    })
+
+    await expect(api.getLatestMessageInfo("s1")).resolves.toEqual({
+      model: { providerID: "openai", modelID: "gpt-5" },
+      parts: [{ type: "text", text: "keep going" }],
+      role: "assistant",
+      text: "keep going",
+    })
+  })
+
+  it("error 空物件仍能保留 message", async () => {
+    const api = createSdkSessionApi({
+      client: {
+        session: {
+          todo: async () => ({ data: [] }),
+          messages: async () => ({
+            data: [{
+              info: {
+                role: "assistant",
+                agent: "sisyphus",
+                model: { providerID: "openai", modelID: "gpt-5" },
+                error: {},
+              },
+              parts: [{ type: "text", text: "keep going" }],
+            }],
+          }),
+          promptAsync: async () => ({ data: undefined }),
+        },
+      },
+      directory: "/tmp",
+      worktree: "/tmp",
+      project: {} as never,
+      serverUrl: new URL("http://localhost"),
+      $: {} as never,
+    })
+
+    await expect(api.getLatestMessageInfo("s1")).resolves.toEqual({
+      agent: "sisyphus",
+      error: { name: undefined },
+      model: { providerID: "openai", modelID: "gpt-5" },
+      parts: [{ type: "text", text: "keep going" }],
+      role: "assistant",
+      text: "keep going",
+    })
+  })
 })

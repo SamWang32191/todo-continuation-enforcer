@@ -2,6 +2,7 @@ import type { BackgroundTaskProbe } from "../plugin/adapters/background-task-pro
 import type { Logger } from "../plugin/adapters/logger"
 import type { MessageStore } from "../plugin/adapters/message-store"
 import type { SessionApi } from "../plugin/adapters/session-api"
+import type { CountdownToast } from "../plugin/adapters/toast"
 
 import { runCountdown } from "./countdown"
 import { injectContinuation } from "./continuation-injection"
@@ -23,6 +24,7 @@ export function createTodoContinuationHandler(args: {
   messageStore: MessageStore
   logger: Logger
   backgroundTaskProbe: BackgroundTaskProbe
+  toast: CountdownToast
   countdownSeconds: number
   skipAgents?: string[]
 }) {
@@ -109,7 +111,12 @@ export function createTodoContinuationHandler(args: {
           return
         }
 
-        const countdownCompleted = await runCountdown(args.countdownSeconds, state)
+        const countdownCompleted = await runCountdown({
+          seconds: args.countdownSeconds,
+          incompleteCount: decision.incompleteCount,
+          state,
+          toast: args.toast,
+        })
 
         if (!countdownCompleted || !stateStore.getExistingState(event.sessionID)) {
           return

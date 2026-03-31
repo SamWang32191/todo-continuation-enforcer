@@ -1,14 +1,22 @@
-import { describe, expect, it } from "bun:test"
+import { afterEach, describe, expect, it } from "bun:test"
 
 import { createEventHandler } from "../../src/plugin/event-handler"
 import { createPlugin } from "../../src/plugin/create-plugin"
 import { createTodoContinuationEnforcer } from "../../src/todo-continuation-enforcer"
-import { createFakeBackgroundTaskProbe, createFakeLogger, createFakeSessionApi } from "../helpers/fakes"
+import { createFakeBackgroundTaskProbe, createFakeCountdownToast, createFakeLogger, createFakeMessageStore, createFakeSessionApi, createMutableFakeMessageStore } from "../helpers/fakes"
+import { createControlledClock } from "../helpers/controlled-clock"
 
 describe("todo continuation enforcer integration", () => {
+  let clock: ReturnType<typeof createControlledClock> | undefined
+
+  afterEach(() => {
+    clock?.restore()
+    clock = undefined
+  })
+
   it("plugin event hook 會把 session.idle 轉給 enforcer", async () => {
     const promptCalls: unknown[] = []
-    const plugin = createPlugin()
+    const plugin = createPlugin({ countdownSeconds: 0 })
     const hooks = await plugin({
       client: {
         session: {
@@ -121,6 +129,64 @@ describe("todo continuation enforcer integration", () => {
     expect(sessionApi.prompts[0]).toContain("Remaining todos")
   })
 
+  it("5 秒 countdown 會顯示正確 toast 文案並在完成後注入 continuation", async () => {
+    clock = createControlledClock()
+    const sessionApi = createFakeSessionApi()
+    const toast = createFakeCountdownToast()
+    const enforcer = createTodoContinuationEnforcer({
+      sessionApi,
+      logger: createFakeLogger(),
+      backgroundTaskProbe: createFakeBackgroundTaskProbe(),
+      toast,
+      countdownSeconds: 5,
+    })
+
+    const idle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+    await clock.advance(5000)
+    await idle
+
+    expect(sessionApi.prompts).toHaveLength(1)
+    expect(toast.messages).toEqual([
+      "Resuming in 5s... (1 tasks remaining)",
+      "Resuming in 4s... (1 tasks remaining)",
+      "Resuming in 3s... (1 tasks remaining)",
+      "Resuming in 2s... (1 tasks remaining)",
+      "Resuming in 1s... (1 tasks remaining)",
+    ])
+  })
+
+  it("countdown 後 messageStore 變成 pending question 時會阻擋 fresh recheck inject", async () => {
+    clock = createControlledClock()
+    const sessionApi = createFakeSessionApi({ latestMessageInfo: undefined })
+    const messageStore = createMutableFakeMessageStore({
+      role: "assistant",
+      agent: "sisyphus",
+      model: { providerID: "openai", modelID: "gpt-5" },
+      text: "Keep going",
+    })
+
+    const enforcer = createTodoContinuationEnforcer({
+      sessionApi,
+      messageStore,
+      logger: createFakeLogger(),
+      backgroundTaskProbe: createFakeBackgroundTaskProbe(),
+      countdownSeconds: 0.05,
+    })
+
+    const idle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+    await clock.advance(10)
+    messageStore.setMessageInfo({
+      role: "assistant",
+      agent: "sisyphus",
+      model: { providerID: "openai", modelID: "gpt-5" },
+      text: "Should I continue?",
+    })
+    await clock.advance(40)
+    await idle
+
+    expect(sessionApi.prompts).toHaveLength(0)
+  })
+
   it("latest assistant message 是 pending question 時不 inject", async () => {
     const sessionApi = createFakeSessionApi({
       latestMessageInfo: {
@@ -142,6 +208,51 @@ describe("todo continuation enforcer integration", () => {
 
     expect(sessionApi.prompts).toHaveLength(0)
     expect(enforcer.getState("s1")?.consecutiveFailures ?? 0).toBe(0)
+  })
+
+  it("messageStore 回傳 pending question 時不 inject", async () => {
+    const sessionApi = createFakeSessionApi({ latestMessageInfo: undefined })
+    const enforcer = createTodoContinuationEnforcer({
+      sessionApi,
+      messageStore: createFakeMessageStore({
+        role: "assistant",
+        agent: "sisyphus",
+        model: { providerID: "openai", modelID: "gpt-5" },
+        text: "Should I continue?",
+      }),
+      logger: createFakeLogger(),
+      backgroundTaskProbe: createFakeBackgroundTaskProbe(),
+      countdownSeconds: 0.01,
+    })
+
+    await enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+
+    expect(sessionApi.prompts).toHaveLength(0)
+  })
+
+  it("question tool pending 時不 countdown 也不 inject", async () => {
+    const sessionApi = createFakeSessionApi({
+      latestMessageInfo: {
+        role: "assistant",
+        agent: "sisyphus",
+        model: { providerID: "openai", modelID: "gpt-5" },
+        parts: [{ type: "tool_use", name: "question" }],
+      },
+    })
+    const toast = createFakeCountdownToast()
+
+    const enforcer = createTodoContinuationEnforcer({
+      sessionApi,
+      toast,
+      logger: createFakeLogger(),
+      backgroundTaskProbe: createFakeBackgroundTaskProbe(),
+      countdownSeconds: 0.05,
+    })
+
+    await enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+
+    expect(toast.messages).toHaveLength(0)
+    expect(sessionApi.prompts).toHaveLength(0)
   })
 
   it("background task running 時不 inject", async () => {
@@ -193,44 +304,53 @@ describe("todo continuation enforcer integration", () => {
   })
 
   it("session.deleted 在 countdown 期間會取消注入", async () => {
+    clock = createControlledClock()
     const sessionApi = createFakeSessionApi()
+    const toast = createFakeCountdownToast()
 
     const enforcer = createTodoContinuationEnforcer({
       sessionApi,
+      toast,
       logger: createFakeLogger(),
       backgroundTaskProbe: createFakeBackgroundTaskProbe(),
-      countdownSeconds: 0.05,
+      countdownSeconds: 5,
     })
 
     const idle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await clock.advance(1000)
     await enforcer.handleEvent({ type: "session.deleted", sessionID: "s1" })
     await idle
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await clock.advance(5000)
 
     expect(sessionApi.prompts).toHaveLength(0)
+    expect(toast.messages[0]).toBe("Resuming in 5s... (1 tasks remaining)")
   })
 
-  it("session.error(AbortError) 在 countdown 期間不會注入", async () => {
+  it("session.error 在 countdown 期間會取消注入", async () => {
+    clock = createControlledClock()
     const sessionApi = createFakeSessionApi()
+    const toast = createFakeCountdownToast()
 
     const enforcer = createTodoContinuationEnforcer({
       sessionApi,
       logger: createFakeLogger(),
       backgroundTaskProbe: createFakeBackgroundTaskProbe(),
-      countdownSeconds: 0.05,
+      toast,
+      countdownSeconds: 5,
     })
 
     const idle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await clock.advance(1000)
     await enforcer.handleEvent({ type: "session.error", sessionID: "s1", error: { name: "AbortError" } })
     await idle
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await clock.advance(5000)
 
     expect(sessionApi.prompts).toHaveLength(0)
+    expect(toast.messages[0]).toBe("Resuming in 5s... (1 tasks remaining)")
   })
 
   it("countdown 期間 todo 變 completed 後不會注入", async () => {
+    clock = createControlledClock()
     let todos = [{ content: "finish", status: "in_progress", priority: "high" as const }]
     const prompts: string[] = []
 
@@ -257,10 +377,11 @@ describe("todo continuation enforcer integration", () => {
     })
 
     const idle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    await clock.advance(10)
     todos = [{ content: "finish", status: "completed", priority: "high" }]
+    await clock.advance(40)
     await idle
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await clock.advance(100)
 
     expect(prompts).toHaveLength(0)
   })
@@ -279,5 +400,28 @@ describe("todo continuation enforcer integration", () => {
     await enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
 
     expect(sessionApi.prompts).toHaveLength(0)
+  })
+
+  it("session.compacted 在 countdown 期間會取消注入", async () => {
+    clock = createControlledClock()
+    const sessionApi = createFakeSessionApi()
+    const toast = createFakeCountdownToast()
+
+    const enforcer = createTodoContinuationEnforcer({
+      sessionApi,
+      toast,
+      logger: createFakeLogger(),
+      backgroundTaskProbe: createFakeBackgroundTaskProbe(),
+      countdownSeconds: 5,
+    })
+
+    const idle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+    await clock.advance(1000)
+    await enforcer.handleEvent({ type: "session.compacted", sessionID: "s1" })
+    await idle
+    await clock.advance(5000)
+
+    expect(sessionApi.prompts).toHaveLength(0)
+    expect(toast.messages[0]).toBe("Resuming in 5s... (1 tasks remaining)")
   })
 })

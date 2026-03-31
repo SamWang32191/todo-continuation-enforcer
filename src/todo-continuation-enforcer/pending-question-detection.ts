@@ -6,5 +6,11 @@ export function hasPendingQuestion(messageInfo: MessageInfo | undefined): boolea
   }
 
   const text = messageInfo.text?.trim()
-  return Boolean(text && /\?\s*$/.test(text))
+  const hasQuestionText = Boolean(text && /[?？]\s*$/.test(text))
+  const hasQuestionToolInvocation = messageInfo.parts?.some(
+    (part) => (part.type === "tool_use" || part.type === "tool-invocation")
+      && (part.name === "question" || part.toolName === "question"),
+  ) ?? false
+
+  return hasQuestionText || hasQuestionToolInvocation
 }
