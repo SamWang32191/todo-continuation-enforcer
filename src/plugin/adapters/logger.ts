@@ -6,14 +6,11 @@ export interface Logger {
 
 export function createConsoleLogger(): Logger {
   return {
-    debug(message, meta) {
-      console.debug(message, meta)
+    debug(_message, _meta) {
     },
-    info(message, meta) {
-      console.info(message, meta)
+    info(_message, _meta) {
     },
-    warn(message, meta) {
-      console.warn(message, meta)
+    warn(_message, _meta) {
     },
   }
 }
