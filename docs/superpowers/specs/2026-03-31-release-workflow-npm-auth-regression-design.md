@@ -38,6 +38,7 @@
 ### After
 
 - `unset NODE_AUTH_TOKEN NPM_TOKEN`
+- `unset NPM_CONFIG_USERCONFIG npm_config_userconfig`
 - `npm config delete //registry.npmjs.org/:_authToken || true`
 - `rm -f ~/.npmrc .npmrc || true`
 - 直接執行 `npm publish --provenance --access public --registry=https://registry.npmjs.org/`
@@ -48,6 +49,7 @@
 2. npm 官方文件指出 OIDC trusted publishing 不需要長效 token，npm CLI 會在 OIDC 環境自動偵測並使用該路徑。
 3. 現行 `NPM_CONFIG_USERCONFIG` 覆寫雖然理論上不一定會破壞 OIDC，但它是這次 regression 與參考實作之間最可疑的差異點，且沒有明顯必要性。
 4. 把清理手段收斂到刪除 token 與 `.npmrc`，更容易理解，也更接近「排除殘留 npm auth 汙染」這個實際目標。
+5. 額外 `unset NPM_CONFIG_USERCONFIG` / `npm_config_userconfig` 能防止 runner 或上層環境殘留的 userconfig 路徑繼續污染 trusted publishing。
 
 ## Testing
 
@@ -55,9 +57,10 @@
 
 - workflow 仍包含 `npm publish --provenance --access public --registry=https://registry.npmjs.org/`
 - publish 前會 `unset NODE_AUTH_TOKEN NPM_TOKEN`
+- publish 前會 `unset NPM_CONFIG_USERCONFIG npm_config_userconfig`
 - publish 前會 `npm config delete //registry.npmjs.org/:_authToken || true`
 - publish 前會 `rm -f ~/.npmrc .npmrc || true`
-- workflow 不再建立或使用 `NPM_CONFIG_USERCONFIG` / `npm_config_userconfig`
+- workflow 不再建立或透過環境殘留使用 `NPM_CONFIG_USERCONFIG` / `npm_config_userconfig`
 
 ## Risks and mitigations
 

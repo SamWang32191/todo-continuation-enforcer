@@ -18,7 +18,8 @@ related: [[installed-package-plugin-smoke-test]]
 
 ## Lesson
 - 正式 release 若採用 `publish -> push` 順序，必須先做 `git push --dry-run --atomic ...` preflight，確認 push 權限與 fast-forward 條件。
-- trusted publishing workflow 應明確走 OIDC 路徑：清理 `NODE_AUTH_TOKEN` / `NPM_TOKEN`，使用乾淨的暫時 `NPM_CONFIG_USERCONFIG`，並對 repo-level `.npmrc` 的 auth token 設定 fail-fast。
+- trusted publishing workflow 應明確走 OIDC 路徑：清理 `NODE_AUTH_TOKEN` / `NPM_TOKEN`，也要額外 `unset NPM_CONFIG_USERCONFIG` / `npm_config_userconfig`，避免 runner 或上層環境殘留的 userconfig 路徑污染 `npm publish`。
+- 優先用「清除殘留環境與 `.npmrc`」的最小 shell，而不是建立暫時 `NPM_CONFIG_USERCONFIG`；若要補 regression test，應驗證 cleanup 發生在 `npm publish` 前，且 publish 當下相關 env 已是未設定狀態。
 - `npm pack --dry-run` 應在 release version 已寫入 `package.json` 後執行，才能驗證最終封包狀態。
 
 ## When to Apply

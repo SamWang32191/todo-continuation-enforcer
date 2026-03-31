@@ -72,6 +72,7 @@ Expected: 既有 `Read package metadata...` PASS；新的 `Publish to npm step..
         run: |
           set -euo pipefail
           unset NODE_AUTH_TOKEN NPM_TOKEN
+          unset NPM_CONFIG_USERCONFIG npm_config_userconfig
           npm config delete //registry.npmjs.org/:_authToken || true
           rm -f ~/.npmrc .npmrc || true
           npm publish --provenance --access public --registry=https://registry.npmjs.org/
@@ -79,8 +80,8 @@ Expected: 既有 `Read package metadata...` PASS；新的 `Publish to npm step..
 
 - [ ] **Step 2: 確認舊的 userconfig 邏輯已完全移除**
 
-Run: `rg -n "NPM_CONFIG_USERCONFIG|npm_config_userconfig|auth token settings in repo-level \.npmrc" .github/workflows/release.yml`
-Expected: 沒有任何輸出
+Run: `rg -n "auth token settings in repo-level \.npmrc|NPM_CONFIG_USERCONFIG=|npm_config_userconfig=" .github/workflows/release.yml`
+Expected: 沒有任何輸出；只允許 `unset NPM_CONFIG_USERCONFIG npm_config_userconfig`
 
 - [ ] **Step 3: 重新跑剛才紅燈的單一 regression test，確認轉綠**
 
