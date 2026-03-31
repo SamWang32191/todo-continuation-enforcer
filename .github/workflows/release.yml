@@ -257,14 +257,10 @@ jobs:
         run: |
           set -euo pipefail
           unset NODE_AUTH_TOKEN NPM_TOKEN
-          if [ -f .npmrc ] && grep -Eq '(^|[[:space:]])(_authToken|authToken)' .npmrc; then
-            echo "Refusing to publish with auth token settings in repo-level .npmrc"
-            exit 1
-          fi
-          NPM_CONFIG_USERCONFIG="$(mktemp)"
-          trap 'rm -f "$NPM_CONFIG_USERCONFIG"' EXIT
-          printf 'registry=https://registry.npmjs.org/\n' > "$NPM_CONFIG_USERCONFIG"
-          npm_config_userconfig="$NPM_CONFIG_USERCONFIG" npm publish --provenance --access public --registry=https://registry.npmjs.org/
+          unset NPM_CONFIG_USERCONFIG npm_config_userconfig
+          npm config delete //registry.npmjs.org/:_authToken || true
+          rm -f ~/.npmrc .npmrc || true
+          npm publish --provenance --access public --registry=https://registry.npmjs.org/
 
       - name: Push release commit and tag
         if: ${{ !inputs.dry_run }}
