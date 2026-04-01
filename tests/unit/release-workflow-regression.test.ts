@@ -60,7 +60,7 @@ describe("release workflow regressions", () => {
     }
   })
 
-  it("Publish to npm step 會清理 auth 且不覆寫 userconfig", () => {
+it("Publish to npm step 會清理 auth token 但保留 setup-node userconfig", () => {
     const workflowText = readFileSync(".github/workflows/release.yml", "utf8")
     const runBlock = extractRunBlock(workflowText, "Publish to npm")
     const tempDir = mkdtempSync(join(tmpdir(), "release-workflow-"))
@@ -126,7 +126,7 @@ fs.appendFileSync(
       expect(result.stderr).toBe("")
 
       expect(runBlock).toMatch(/unset\s+NODE_AUTH_TOKEN\s+NPM_TOKEN/)
-      expect(runBlock).toMatch(/unset\s+NPM_CONFIG_USERCONFIG\s+npm_config_userconfig/)
+      expect(runBlock).not.toMatch(/unset\s+NPM_CONFIG_USERCONFIG\s+npm_config_userconfig/)
 
       const calls = readFileSync(callLogPath, "utf8")
         .trim()
@@ -163,16 +163,16 @@ fs.appendFileSync(
           NPM_CONFIG_USERCONFIG: publishCall?.NPM_CONFIG_USERCONFIG ?? "__UNSET__",
           npm_config_userconfig: publishCall?.npm_config_userconfig ?? "__UNSET__",
         },
-      }).toEqual({
-        cleanupBeforePublish: true,
-        publishArgs: "publish --provenance --access public --registry=https://registry.npmjs.org/",
-        publishEnv: {
-          NODE_AUTH_TOKEN: "__UNSET__",
-          NPM_TOKEN: "__UNSET__",
-          NPM_CONFIG_USERCONFIG: "__UNSET__",
-          npm_config_userconfig: "__UNSET__",
-        },
-      })
+        }).toEqual({
+          cleanupBeforePublish: true,
+          publishArgs: "publish --provenance --access public --registry=https://registry.npmjs.org/",
+          publishEnv: {
+            NODE_AUTH_TOKEN: "__UNSET__",
+            NPM_TOKEN: "__UNSET__",
+            NPM_CONFIG_USERCONFIG: "parent-upper-userconfig",
+            npm_config_userconfig: "parent-userconfig",
+          },
+        })
     } finally {
       rmSync(tempDir, { recursive: true, force: true })
     }
