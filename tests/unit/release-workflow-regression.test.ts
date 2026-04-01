@@ -60,6 +60,32 @@ describe("release workflow regressions", () => {
     }
   })
 
+  it("Read current version step 能成功寫出 current version", () => {
+    const workflowText = readFileSync(".github/workflows/release.yml", "utf8")
+    const runBlock = extractRunBlock(workflowText, "Read current version")
+
+    const tempDir = mkdtempSync(join(tmpdir(), "release-workflow-"))
+    try {
+      const scriptPath = join(tempDir, "read-current-version.sh")
+      const outputPath = join(tempDir, "github-output.txt")
+      const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as { version: string }
+
+      writeFileSync(scriptPath, `${runBlock}\n`)
+      writeFileSync(outputPath, "")
+
+      const result = spawnSync("bash", [scriptPath], {
+        env: { ...process.env, GITHUB_OUTPUT: outputPath },
+        encoding: "utf8",
+      })
+
+      expect(result.status).toBe(0)
+      expect(result.stderr).toBe("")
+      expect(readFileSync(outputPath, "utf8")).toBe(`current_version=${packageJson.version}\n`)
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("Resolve and validate release version step 能處理 manual/auto-bump/錯誤輸入", () => {
     const workflowText = readFileSync(".github/workflows/release.yml", "utf8")
     const runBlock = extractRunBlock(workflowText, "Resolve and validate release version")

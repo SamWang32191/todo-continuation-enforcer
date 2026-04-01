@@ -49,7 +49,7 @@ jobs:
       - name: Read current version
         id: package-meta
         run: |
-          printf 'current_version=%s\n' "$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+          printf 'current_version=%s\n' "$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Compute bumped version
         id: bump
