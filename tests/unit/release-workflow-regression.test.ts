@@ -146,6 +146,12 @@ describe("release workflow regressions", () => {
     }
   })
 
+  it("release job 在 auto-bump skipped 時仍會執行", () => {
+    const workflowText = readFileSync(".github/workflows/release.yml", "utf8")
+
+    expect(workflowText).toContain("release:\n    runs-on: ubuntu-latest\n    timeout-minutes: 15\n    needs: ensure-release-readiness\n    if: ${{ !failure() && !cancelled() }}")
+  })
+
 it("Publish to npm step 會清理 auth token 但保留 setup-node userconfig", () => {
     const workflowText = readFileSync(".github/workflows/release.yml", "utf8")
     const runBlock = extractRunBlock(workflowText, "Publish to npm")

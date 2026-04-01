@@ -165,6 +165,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: ensure-release-readiness
+    if: ${{ !failure() && !cancelled() }}
     steps:
       - name: Guard dispatch branch is main
         run: |
