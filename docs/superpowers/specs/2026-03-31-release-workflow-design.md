@@ -30,20 +30,19 @@
 不沿用的部分：
 
 - `medium` 分支限制，改為 `main`
-- `auto-bump` job
 - `lint` 步驟
 - `scripts/release-ci.ts`
 - upstream remote 專屬設定
 
 ## Chosen Approach
 
-採用「**手動輸入版本的完整發版 workflow**」。
+採用「**手動輸入或選擇 auto-bump 的完整發版 workflow**」。
 
 ### Why this approach
 
-- 對這個 repo 最小且足夠：不需要額外 release script。
+- 對這個 repo 仍屬最小且足夠：不需要額外 release script。
 - 仍保有完整保護：版本驗證、release 狀態檢查、branch/head 驗證、dry-run。
-- 操作方式清楚：每次 release 明確輸入版本號，避免 workflow 幫忙推算版本造成額外複雜度。
+- 操作方式仍清楚：可以明確手動輸入版本，或在 patch/minor 兩種常見情況下直接選擇 auto-bump。
 - 明確定義 partial failure 行為，避免實作者自行腦補發版順序。
 
 ## Workflow Behavior
@@ -54,16 +53,19 @@
 
 ### Inputs
 
-- `version`：字串，必填，必須是嚴格 semver `X.Y.Z`
+- `auto-bump`：choice，選項為 `no` / `patch` / `minor`，預設 `no`
+- `version`：字串，當 `auto-bump = no` 時必填，必須是嚴格 semver `X.Y.Z`
 - `notes`：字串，選填，用於 GitHub Release 文字
 - `dry_run`：布林，預設 `false`
 
 ### Version Rules
 
-- `version` 不可為空
-- `version` 不可帶 `v` 前綴
-- `version` 必須符合嚴格 semver `X.Y.Z`
-- `version` 必須大於目前 `package.json` 的 version
+- `auto-bump` 與 `version` 不可同時提供
+- 若 `auto-bump != no`，workflow 先從目前 `package.json` version 推算下一個 patch/minor 版本
+- 若 `auto-bump = no`，`version` 不可為空
+- 最終版本不可帶 `v` 前綴
+- 最終版本必須符合嚴格 semver `X.Y.Z`
+- 最終版本必須大於目前 `package.json` 的 version
 
 若任一條件不成立，workflow 直接失敗。
 
@@ -87,9 +89,10 @@
 
 責任：
 
+- 若需要，先計算 auto-bump 版本
 - checkout full history 與 tags
-- 驗證 `version` input
-- 讀取目前 `package.json` version 並檢查輸入版本是否更大
+- 驗證最終版本輸入與互斥規則
+- 讀取目前 `package.json` version 並檢查最終版本是否更大
 - 檢查 `v${version}` tag 是否已存在
 - 檢查 npm registry 上 `${packageName}@${version}` 是否已存在
 - 將最終版本輸出為 job output
@@ -243,6 +246,7 @@ release 前固定執行：
 
 ## Error Handling
 
+- `auto-bump` 與 `version` 同時提供：直接 fail
 - `version` 缺失、格式錯誤、帶 `v` 前綴、未大於當前版本：直接 fail
 - tag 與 npm version 都已存在：直接 fail，視為已發布
 - tag / npm version 僅一方存在：直接 fail，視為 partial release
@@ -257,15 +261,15 @@ release 前固定執行：
 實作後應驗證：
 
 1. YAML 結構合理，inputs / jobs / permissions / concurrency 正確
-2. readiness job 會正確區分「未發布 / 已發布 / partial release」三種狀態
-3. `dry_run: true` 時只跑驗證與本地 release 準備步驟
-4. `dry_run: false` 時具備 publish / 單一 push commit+tag / GitHub Release 路徑
-5. 從非 `main` branch dispatch 時會失敗
-6. 從不是 `origin/main` 最新 head 的 commit dispatch 時會失敗
+2. manual version、auto-bump、缺少輸入、互斥輸入四種版本決策都能正確驗證
+3. readiness job 會正確區分「未發布 / 已發布 / partial release」三種狀態
+4. `dry_run: true` 時只跑驗證與本地 release 準備步驟
+5. `dry_run: false` 時具備 publish / 單一 push commit+tag / GitHub Release 路徑
+6. 從非 `main` branch dispatch 時會失敗
+7. 從不是 `origin/main` 最新 head 的 commit dispatch 時會失敗
 
 ## Out of Scope
 
-- 自動 bump patch/minor version
 - 自動產生 changelog
 - 依 PR/commit 自動聚合 release note
 - 自動從 tag push 觸發 release

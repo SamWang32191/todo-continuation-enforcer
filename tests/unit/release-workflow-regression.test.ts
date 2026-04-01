@@ -60,6 +60,66 @@ describe("release workflow regressions", () => {
     }
   })
 
+  it("Resolve and validate release version step 能處理 manual/auto-bump/錯誤輸入", () => {
+    const workflowText = readFileSync(".github/workflows/release.yml", "utf8")
+    const runBlock = extractRunBlock(workflowText, "Resolve and validate release version")
+    const tempDir = mkdtempSync(join(tmpdir(), "release-workflow-"))
+
+    try {
+      const scriptPath = join(tempDir, "resolve-version.sh")
+      const outputPath = join(tempDir, "github-output.txt")
+      writeFileSync(scriptPath, `${runBlock}\n`)
+
+      const runScenario = (env: Record<string, string>) => {
+        writeFileSync(outputPath, "")
+        return spawnSync("bash", [scriptPath], {
+          env: { ...process.env, ...env, GITHUB_OUTPUT: outputPath },
+          encoding: "utf8",
+        })
+      }
+
+      const autoBumpResult = runScenario({
+        AUTO_BUMP_VERSION: "0.1.2",
+        INPUT_VERSION: "",
+        CURRENT_VERSION: "0.1.1",
+      })
+      expect(autoBumpResult.status).toBe(0)
+      expect(autoBumpResult.stderr).toBe("")
+      expect(readFileSync(outputPath, "utf8")).toBe("final_version=0.1.2\n")
+
+      const manualResult = runScenario({
+        AUTO_BUMP_VERSION: "",
+        INPUT_VERSION: "0.2.0",
+        CURRENT_VERSION: "0.1.1",
+      })
+      expect(manualResult.status).toBe(0)
+      expect(manualResult.stderr).toBe("")
+      expect(readFileSync(outputPath, "utf8")).toBe("final_version=0.2.0\n")
+
+      const missingInputsResult = runScenario({
+        AUTO_BUMP_VERSION: "",
+        INPUT_VERSION: "",
+        CURRENT_VERSION: "0.1.1",
+      })
+      expect(missingInputsResult.status).not.toBe(0)
+      expect(missingInputsResult.stderr).toContain(
+        "Either select auto-bump or provide version input",
+      )
+
+      const conflictingInputsResult = runScenario({
+        AUTO_BUMP_VERSION: "0.1.2",
+        INPUT_VERSION: "0.2.0",
+        CURRENT_VERSION: "0.1.1",
+      })
+      expect(conflictingInputsResult.status).not.toBe(0)
+      expect(conflictingInputsResult.stderr).toContain(
+        "Provide either auto-bump or version input, not both",
+      )
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
 it("Publish to npm step 會清理 auth token 但保留 setup-node userconfig", () => {
     const workflowText = readFileSync(".github/workflows/release.yml", "utf8")
     const runBlock = extractRunBlock(workflowText, "Publish to npm")

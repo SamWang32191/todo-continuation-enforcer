@@ -4,6 +4,7 @@
 
 | Card | Scope | Tags | Date |
 |---|---|---|---|
+| `release-workflow-mutually-exclusive-inputs` | project | github-actions, release, workflow-dispatch, validation, inputs | 2026-04-01 |
 | `github-actions-metadata-step-stderr-regression` | project | github-actions, bash, quoting, stderr, regression-test | 2026-03-31 |
 | `release-workflow-publish-preflight` | project | github-actions, release, npm, trusted-publishing, git-push | 2026-03-31 |
 | `installed-package-plugin-smoke-test` | project | opencode, plugin, npm-pack, smoke-test, publish | 2026-03-28 |

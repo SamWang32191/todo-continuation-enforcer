@@ -9,7 +9,7 @@
 - release 內容準備順序：先更新 `package.json` version，再 `npm pack --dry-run`，再產生 release body
 - 驗收時請保留 GitHub Actions run URL 與 logs 作為證據
 
-## 1) dry-run 成功案例
+## 1) dry-run 成功案例（手動 version）
 
 **前置條件**
 - 在 `main` 的最新 HEAD 上觸發
@@ -29,7 +29,45 @@
 - 不會執行 npm publish、git push、`gh release create`。
 - 遠端 repo、npm registry、GitHub Releases 都沒有變更。
 
-## 2) non-main dispatch 失敗案例
+## 2) dry-run 成功案例（auto-bump）
+
+**前置條件**
+- 在 `main` 的最新 HEAD 上觸發
+- `package.json` 目前版本可被安全地遞增到下一個 patch 或 minor
+- 目標自動遞增版本目前不存在於 git tag / npm registry
+- `dry_run=true`
+
+**操作方式**
+1. 手動 dispatch workflow。
+2. 設定 `auto-bump=patch` 或 `auto-bump=minor`。
+3. 保持 `version` 空白。
+4. 確認 run 完成。
+
+**預期結果**
+- `auto-bump` job 會先算出 `bumped_version`。
+- readiness 檢查會採用自動計算出的版本作為 `final_version`。
+- 會執行 install / typecheck / test / build / `npm pack --dry-run`。
+- 只會在 runner 本地更新 version、建立 local commit/tag、產生 release body。
+- 不會執行 npm publish、git push、`gh release create`。
+- 遠端 repo、npm registry、GitHub Releases 都沒有變更。
+
+## 3) auto-bump 與 version 同時提供失敗案例
+
+**前置條件**
+- 在 `main` 的最新 HEAD 上觸發
+- `dry_run=true`
+
+**操作方式**
+1. 手動 dispatch workflow。
+2. 同時填入 `auto-bump=patch` 與 `version=X.Y.Z`。
+3. 觀察 `ensure-release-readiness` job。
+
+**預期結果**
+- workflow 在 `Resolve and validate release version` 直接失敗。
+- log 明確指出 `Provide either auto-bump or version input, not both`。
+- 不會進入後續 release-state、build、publish、push、release 流程。
+
+## 4) non-main dispatch 失敗案例
 
 **前置條件**
 - 從非 `main` 分支手動觸發 workflow。
@@ -43,7 +81,7 @@
 - 訊息明確指出只能從 `main` dispatch。
 - 不會進入 install / test / build / publish / push / release 流程。
 
-## 3) stale origin/main SHA 失敗案例
+## 5) stale origin/main SHA 失敗案例
 
 **前置條件**
 - 只在 sandbox / test repo 驗證。
@@ -60,7 +98,7 @@
 - log 顯示 `origin/main` SHA 與 dispatch SHA 不一致，且 dispatch SHA 為較舊的 `old_sha`。
 - 不會執行後續建置與 release 動作。
 
-## 4) partial release 偵測案例
+## 6) partial release 偵測案例
 
 **前置條件**
 - 僅限 sandbox repo / 測試 package / fork 驗證。
@@ -79,7 +117,7 @@
 - log 明確指出 `Partial release detected`。
 - 不會進入 release job。
 
-## 5) 正式 release 路徑驗收點
+## 7) 正式 release 路徑驗收點
 
 **前置條件**
 - `main` 最新 HEAD
