@@ -56,7 +56,6 @@ jobs:
         uses: WyriHaximus/github-action-next-semvers@v1
         with:
           version: ${{ steps.package-meta.outputs.current_version }}
-          bump: ${{ inputs.auto-bump }}
 
   ensure-release-readiness:
     runs-on: ubuntu-latest
