@@ -645,7 +645,7 @@ describe("todo continuation enforcer integration", () => {
     await expect(cancelTool?.execute({ sessionID: "s1" }, {})).resolves.toContain("No pending continuation")
   })
 
-  it("plugin tool 會以 command-enabled tool 暴露 cancel_next_continuation", async () => {
+  it("plugin config 會註冊 formal cancel-next-continuation command", async () => {
     const plugin = createPlugin({ countdownSeconds: 5 })
     const hooks = await plugin({
       client: {
@@ -665,11 +665,26 @@ describe("todo continuation enforcer integration", () => {
       $: {} as never,
     })
 
-    const cancelTool = (hooks as never as {
-      tool?: Record<string, { command?: boolean; directExecution?: boolean }>
-    }).tool?.cancel_next_continuation
+    const config: Record<string, unknown> = {
+      command: {
+        existing: {
+          name: "existing",
+          description: "Existing command",
+          template: "Existing template",
+        },
+      },
+    }
 
-    expect(cancelTool).toMatchObject({ command: true, directExecution: true })
+    await hooks.config?.(config as never)
+
+    const commands = config.command as Record<string, { name?: string; description?: string; template?: string }>
+
+    expect(commands.existing).toBeDefined()
+    expect(commands["cancel-next-continuation"]).toMatchObject({
+      name: "cancel-next-continuation",
+    })
+    expect(commands["cancel-next-continuation"]?.description).toContain("Cancel")
+    expect(commands["cancel-next-continuation"]?.template).toContain("cancel_next_continuation")
   })
 
   it("plugin tool 不傳 sessionID 時會使用 context.sessionID", async () => {

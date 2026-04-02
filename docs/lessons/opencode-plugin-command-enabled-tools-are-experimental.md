@@ -2,24 +2,24 @@
 id: opencode-plugin-command-enabled-tools-are-experimental
 date: 2026-04-02
 scope: project
-tags: [opencode, plugin, command, tool, experimental]
+tags: [opencode, plugin, command, config, registration]
 source: user-correction
 confidence: 0.7
 related: [[plugin-tool-context-missing-session-id]]
 ---
 
-# OpenCode plugin tools can become slash commands through experimental flags
+# Prefer config hook registration for OpenCode plugin commands
 
 ## Context
-在這個 repo 想把 `cancel_next_continuation` 做成使用者可直接觸發的取消入口時，一開始把 plugin custom tool 與 custom command 視為兩條完全分離的能力。
+在這個 repo 想把 `cancel_next_continuation` 做成使用者可直接觸發的取消入口時，一開始只靠 tool 上的 experimental flags，希望 host 自動把它變成 command。
 
 ## Mistake
-如果只看穩定版 plugin docs，很容易以為 plugin 完全不能提供 slash command，因而把設計過早侷限在 README workaround 或外部 command 檔。
+把 command 註冊綁在 tool 的 experimental flags 上，會讓 host 可能根本沒有正式註冊 command；結果是 README 看起來有入口，但 runtime 不一定真的出現可用 command。
 
 ## Lesson
-- OpenCode 存在 experimental `pluginCommands` 能力，可把 plugin tool 透過額外 flags 暴露成 slash command fallback。
-- 這條路徑是 experimental，不要把它描述成所有 host/runtime 都保證可用的穩定 API。
-- 文件與程式都要保守表述：說明它是 fallback、依賴 host 支援，避免硬寫未驗證的固定 slash command 字串。
+- 正式 plugin command 應優先比照 `just-loop`，在 `config` hook 內把 command 定義 merge 回 `input.command`。
+- `tool` 可以保留作為實際執行邏輯或 agent 入口，但不要把「tool flags 會自動變 command」當成主要註冊機制。
+- experimental tool flags 若要保留，也只能視為額外 fallback，不應是唯一 command 註冊來源。
 
 ## When to Apply
-當 OpenCode plugin 需要「使用者可手動觸發」的入口，而且現有 TUI keybind / event routing 不足時。
+當 OpenCode plugin 需要穩定、可預期的使用者 command 入口時，尤其是你已經有可重用 tool 邏輯，但 host 端仍需要正式 command 註冊的情境。
