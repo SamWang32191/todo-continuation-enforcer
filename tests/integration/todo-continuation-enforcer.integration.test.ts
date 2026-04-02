@@ -157,7 +157,10 @@ describe("todo continuation enforcer integration", () => {
     await enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
 
     expect(sessionApi.prompts).toHaveLength(1)
-    expect(sessionApi.prompts[0]).toContain("Incomplete tasks remain")
+    expect(sessionApi.prompts[0]).toContain(
+      "If you need a user response, use the Question tool instead of asking in plain text.",
+    )
+    expect(sessionApi.prompts[0]).toContain("Else incomplete tasks remain")
     expect(sessionApi.prompts[0]).toContain("Remaining todos")
   })
 

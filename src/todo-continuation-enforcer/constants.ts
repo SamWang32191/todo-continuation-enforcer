@@ -11,4 +11,4 @@ export const MAX_STAGNATION_COUNT = 3
 export const MAX_CONSECUTIVE_FAILURES = 5
 export const FAILURE_RESET_WINDOW_MS = 5 * 60_000
 
-export const CONTINUATION_PROMPT = `${createSystemDirective("TODO_CONTINUATION")}\nIncomplete tasks remain in your todo list. Continue working on the next pending task.\n- Proceed without asking for permission\n- Mark each task complete when finished\n- Do not stop until all tasks are done\n- If you believe all work is already complete, critically re-check each todo item and update the todo list accordingly.`
+export const CONTINUATION_PROMPT = `${createSystemDirective("TODO_CONTINUATION")}\nIf you need a user response, use the Question tool instead of asking in plain text.\n\nElse incomplete tasks remain in your todo list. Continue working on the next pending task.\n- Proceed without asking for permission\n- Mark each task complete when finished\n- Do not stop until all tasks are done\n- If you believe all work is already complete, critically re-check each todo item and update the todo list accordingly.`
