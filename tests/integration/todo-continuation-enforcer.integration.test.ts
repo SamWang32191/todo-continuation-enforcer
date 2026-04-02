@@ -102,6 +102,22 @@ describe("todo continuation enforcer integration", () => {
     expect(calls).toEqual([{ type: "session.error", sessionID: "s1", error: { name: "AbortError" } }])
   })
 
+  it("tui.command.execute 的 session.interrupt 會轉給 handler", async () => {
+    const calls: Array<{ type: string; sessionID: string }> = []
+    const handler = createEventHandler(async (event) => {
+      calls.push(event)
+    })
+
+    await handler({
+      event: {
+        type: "tui.command.execute",
+        properties: { sessionID: "s1", command: "session.interrupt" },
+      } as never,
+    })
+
+    expect(calls).toEqual([{ type: "session.interrupt", sessionID: "s1" }])
+  })
+
   it("session.idle 正常 payload 仍會轉給 handler", async () => {
     const calls: Array<{ type: string; sessionID: string }> = []
     const handler = createEventHandler(async (event) => {
@@ -397,6 +413,29 @@ describe("todo continuation enforcer integration", () => {
     const idle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
     await clock.advance(1000)
     await enforcer.handleEvent({ type: "session.error", sessionID: "s1", error: { name: "AbortError" } })
+    await idle
+    await clock.advance(5000)
+
+    expect(sessionApi.prompts).toHaveLength(0)
+    expect(toast.messages[0]).toBe("Resuming in 5s... (1 tasks remaining)")
+  })
+
+  it("session.interrupt 在 countdown 期間會取消注入", async () => {
+    clock = createControlledClock()
+    const sessionApi = createFakeSessionApi()
+    const toast = createFakeCountdownToast()
+
+    const enforcer = createTodoContinuationEnforcer({
+      sessionApi,
+      logger: createFakeLogger(),
+      backgroundTaskProbe: createFakeBackgroundTaskProbe(),
+      toast,
+      countdownSeconds: 5,
+    })
+
+    const idle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+    await clock.advance(1000)
+    await enforcer.handleEvent({ type: "session.interrupt", sessionID: "s1" } as never)
     await idle
     await clock.advance(5000)
 

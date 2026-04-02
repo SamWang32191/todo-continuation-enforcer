@@ -2,18 +2,32 @@ import type { Hooks } from "@opencode-ai/plugin"
 
 import type { ContinuationEvent } from "../todo-continuation-enforcer/handler"
 
-type ContinuationEventType = ContinuationEvent["type"]
+type PluginEventType = ContinuationEvent["type"] | "tui.command.execute"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
 }
 
-function isContinuationEventType(type: unknown): type is ContinuationEventType {
-  return type === "session.idle" || type === "session.error" || type === "session.deleted" || type === "session.compacted"
+function isPluginEventType(type: unknown): type is PluginEventType {
+  return type === "session.idle"
+    || type === "session.error"
+    || type === "session.deleted"
+    || type === "session.compacted"
+    || type === "session.interrupt"
+    || type === "tui.command.execute"
+}
+
+function isSessionInterruptCommand(event: unknown): boolean {
+  if (!isRecord(event) || event.type !== "tui.command.execute") {
+    return false
+  }
+
+  const properties = isRecord(event.properties) ? event.properties : undefined
+  return properties?.command === "session.interrupt"
 }
 
 function getSessionID(event: unknown): string | undefined {
-  if (!isRecord(event) || !isContinuationEventType(event.type)) {
+  if (!isRecord(event) || !isPluginEventType(event.type)) {
     return undefined
   }
 
@@ -32,6 +46,13 @@ function getSessionID(event: unknown): string | undefined {
       return isRecord(properties?.info) && typeof properties.info.id === "string"
         ? properties.info.id
         : undefined
+    case "session.interrupt":
+    case "tui.command.execute":
+      if (typeof properties?.sessionID === "string") {
+        return properties.sessionID
+      }
+
+      return isRecord(properties?.info) && typeof properties.info.id === "string" ? properties.info.id : undefined
     default:
       return undefined
   }
@@ -60,7 +81,11 @@ function getContinuationError(event: unknown): { name?: string } | undefined {
 
 export function createEventHandler(handleEvent: (event: ContinuationEvent) => Promise<void>): NonNullable<Hooks["event"]> {
   return async ({ event }) => {
-    if (!isRecord(event) || !isContinuationEventType(event.type)) {
+    if (!isRecord(event) || !isPluginEventType(event.type)) {
+      return
+    }
+
+    if (event.type === "tui.command.execute" && !isSessionInterruptCommand(event)) {
       return
     }
 
@@ -71,7 +96,7 @@ export function createEventHandler(handleEvent: (event: ContinuationEvent) => Pr
     }
 
     await handleEvent({
-      type: event.type,
+      type: event.type === "tui.command.execute" ? "session.interrupt" : event.type,
       sessionID,
       error: getContinuationError(event),
     })

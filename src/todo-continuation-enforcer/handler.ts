@@ -14,7 +14,7 @@ import { SessionStateStore } from "./session-state"
 import { commitStagnationState, previewStagnationState } from "./stagnation-detection"
 
 export type ContinuationEvent = {
-  type: "session.idle" | "session.error" | "session.deleted" | "session.compacted"
+  type: "session.idle" | "session.error" | "session.deleted" | "session.compacted" | "session.interrupt"
   sessionID: string
   error?: { name?: string }
 }
@@ -55,6 +55,11 @@ export function createTodoContinuationHandler(args: {
     },
 
     async handleEvent(event: ContinuationEvent): Promise<void> {
+      if (event.type === "session.interrupt") {
+        await this.cancelNextContinuation(event.sessionID)
+        return
+      }
+
       if (event.type === "session.deleted") {
         stateStore.clear(event.sessionID)
         return
