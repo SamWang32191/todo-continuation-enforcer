@@ -4,25 +4,38 @@ Standalone OpenCode plugin that continues unfinished todos when a session become
 
 ## Install
 
-```bash
-npm install todo-continuation-enforcer
+Add the plugin to your OpenCode config:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["todo-continuation-enforcer"]
+}
 ```
+
+You can place this in either:
+
+- `opencode.json`
+- `~/.config/opencode/opencode.json`
 
 ## Usage
 
-Build output is published from `dist/`, and the plugin manifest lives in `.claude-plugin/plugin.json`.
-
-Point your local OpenCode/OpenAgent plugin loader at this repository root, or configure it to load the published plugin entry after installation.
+OpenCode will install and load npm plugins declared in `opencode.json` automatically on startup.
 
 ## Local plugin loading
 
-Build the plugin first:
+If you want to load the plugin from a local checkout instead of npm, build it first:
 
 ```bash
 bun run build
 ```
 
-Then point your local OpenCode/OpenAgent plugin loader at this repository root so it can read `.claude-plugin/plugin.json` and load `dist/index.js`.
+Then place or link this repository under one of OpenCode's local plugin directories:
+
+- `.opencode/plugins/`
+- `~/.config/opencode/plugins/`
+
+OpenCode will load the plugin manifest from `.claude-plugin/plugin.json` and then load `dist/index.js`.
 
 The minimal manifest lives in `.claude-plugin/plugin.json`.
 
@@ -51,7 +64,7 @@ npm publish --dry-run
 - [ ] `bun run typecheck`
 - [ ] `bun test`
 - [ ] `bun run build`
-- [ ] plugin loader 指向 repo root
+- [ ] `opencode.json` 已加入 `todo-continuation-enforcer`
 - [ ] 啟動有 unfinished todo 的 session
 - [ ] 讓 session 進入 `session.idle`
 - [ ] 確認會 inject continuation prompt
