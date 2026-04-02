@@ -4,6 +4,7 @@
 
 | Card | Scope | Tags | Date |
 |---|---|---|---|
+| `formal-command-events-should-backstop-tool-context-session-id` | project | opencode, plugin, command, session-id, fallback | 2026-04-03 |
 | `opencode-plugin-command-enabled-tools-are-experimental` | project | opencode, plugin, command, config, registration | 2026-04-02 |
 | `readme-should-not-document-internal-plugin-factories` | project | readme, docs, plugin, api, exports | 2026-04-02 |
 | `plugin-tool-context-missing-session-id` | project | opencode, plugin, tool, session-id, sdk | 2026-04-02 |

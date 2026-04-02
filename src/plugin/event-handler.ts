@@ -1,6 +1,7 @@
 import type { Hooks } from "@opencode-ai/plugin"
 
 import type { ContinuationEvent } from "../todo-continuation-enforcer/handler"
+import { CANCEL_NEXT_CONTINUATION_COMMAND_NAME } from "./command-definitions"
 
 type PluginEventType = ContinuationEvent["type"] | "tui.command.execute"
 
@@ -24,6 +25,7 @@ function isSessionInterruptCommand(event: unknown): boolean {
 
   const properties = isRecord(event.properties) ? event.properties : undefined
   return properties?.command === "session.interrupt"
+    || properties?.command === CANCEL_NEXT_CONTINUATION_COMMAND_NAME
 }
 
 function getSessionID(event: unknown): string | undefined {

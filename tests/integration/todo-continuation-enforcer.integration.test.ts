@@ -118,6 +118,22 @@ describe("todo continuation enforcer integration", () => {
     expect(calls).toEqual([{ type: "session.interrupt", sessionID: "s1" }])
   })
 
+  it("tui.command.execute 的 cancel-next-continuation 也會轉給 handler", async () => {
+    const calls: Array<{ type: string; sessionID: string }> = []
+    const handler = createEventHandler(async (event) => {
+      calls.push(event)
+    })
+
+    await handler({
+      event: {
+        type: "tui.command.execute",
+        properties: { sessionID: "s1", command: "cancel-next-continuation" },
+      } as never,
+    })
+
+    expect(calls).toEqual([{ type: "session.interrupt", sessionID: "s1" }])
+  })
+
   it("session.idle 正常 payload 仍會轉給 handler", async () => {
     const calls: Array<{ type: string; sessionID: string }> = []
     const handler = createEventHandler(async (event) => {
