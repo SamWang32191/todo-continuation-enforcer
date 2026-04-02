@@ -4,6 +4,7 @@
 
 | Card | Scope | Tags | Date |
 |---|---|---|---|
+| `readme-should-not-document-internal-plugin-factories` | project | readme, docs, plugin, api, exports | 2026-04-02 |
 | `plugin-tool-context-missing-session-id` | project | opencode, plugin, tool, session-id, sdk | 2026-04-02 |
 | `release-workflow-mutually-exclusive-inputs` | project | github-actions, release, workflow-dispatch, validation, inputs | 2026-04-01 |
 | `github-actions-metadata-step-stderr-regression` | project | github-actions, bash, quoting, stderr, regression-test | 2026-03-31 |
