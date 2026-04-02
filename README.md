@@ -22,6 +22,9 @@ You can place this in either:
 
 OpenCode will install and load npm plugins declared in `opencode.json` automatically on startup.
 
+By default, the plugin waits 10 seconds before injecting a continuation prompt when a session becomes idle.
+At the source/internals level, `countdownSeconds` can be overridden for custom setups.
+
 ## Local plugin loading
 
 If you want to load the plugin from a local checkout instead of npm, build it first:

@@ -16,7 +16,7 @@ export function createPlugin(options?: { countdownSeconds?: number }): Plugin {
       logger: createConsoleLogger(),
       backgroundTaskProbe: createNoopBackgroundTaskProbe(),
       toast: createSdkCountdownToast(ctx),
-      countdownSeconds: options?.countdownSeconds ?? 5,
+      countdownSeconds: options?.countdownSeconds ?? 10,
     })
 
     return {

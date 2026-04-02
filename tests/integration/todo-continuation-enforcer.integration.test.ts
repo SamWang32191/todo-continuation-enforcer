@@ -129,7 +129,7 @@ describe("todo continuation enforcer integration", () => {
     expect(sessionApi.prompts[0]).toContain("Remaining todos")
   })
 
-  it("5 秒 countdown 會顯示正確 toast 文案並在完成後注入 continuation", async () => {
+  it("10 秒 countdown 會顯示正確 toast 文案並在完成後注入 continuation", async () => {
     clock = createControlledClock()
     const sessionApi = createFakeSessionApi()
     const toast = createFakeCountdownToast()
@@ -138,21 +138,76 @@ describe("todo continuation enforcer integration", () => {
       logger: createFakeLogger(),
       backgroundTaskProbe: createFakeBackgroundTaskProbe(),
       toast,
-      countdownSeconds: 5,
+      countdownSeconds: 10,
     })
 
     const idle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
-    await clock.advance(5000)
+    await clock.advance(10000)
     await idle
 
     expect(sessionApi.prompts).toHaveLength(1)
     expect(toast.messages).toEqual([
+      "Resuming in 10s... (1 tasks remaining)",
+      "Resuming in 9s... (1 tasks remaining)",
+      "Resuming in 8s... (1 tasks remaining)",
+      "Resuming in 7s... (1 tasks remaining)",
+      "Resuming in 6s... (1 tasks remaining)",
       "Resuming in 5s... (1 tasks remaining)",
       "Resuming in 4s... (1 tasks remaining)",
       "Resuming in 3s... (1 tasks remaining)",
       "Resuming in 2s... (1 tasks remaining)",
       "Resuming in 1s... (1 tasks remaining)",
     ])
+  })
+
+  it("createPlugin 預設 countdown 是 10 秒", async () => {
+    clock = createControlledClock()
+    const promptCalls: unknown[] = []
+    const toast = createFakeCountdownToast()
+    const plugin = createPlugin()
+    const hooks = await plugin({
+      client: {
+        session: {
+          todo: async () => ({
+            data: [{ content: "finish", status: "pending", priority: "high" }],
+          }),
+          messages: async () => ({
+            data: [
+              {
+                info: { role: "assistant", agent: "sisyphus", model: { providerID: "openai", modelID: "gpt-5" } },
+                parts: [{ type: "text", text: "keep going" }],
+              },
+            ],
+          }),
+          promptAsync: async (args: unknown) => {
+            promptCalls.push(args)
+          },
+        },
+        tui: {
+          showToast: async ({ body }: { body?: { message?: string } }) => {
+            if (body?.message) toast.messages.push(body.message)
+          },
+        },
+      },
+      directory: "/tmp",
+      project: {} as never,
+      worktree: "/tmp",
+      serverUrl: new URL("http://localhost"),
+      $: {} as never,
+    })
+
+    const idle = hooks.event?.({
+      event: {
+        type: "session.idle",
+        properties: { sessionID: "s1" },
+      },
+    } as never)
+
+    await clock.advance(10000)
+    await idle
+
+    expect(promptCalls).toHaveLength(1)
+    expect(toast.messages[0]).toBe("Resuming in 10s... (1 tasks remaining)")
   })
 
   it("countdown 後 messageStore 變成 pending question 時會阻擋 fresh recheck inject", async () => {
