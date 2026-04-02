@@ -19,6 +19,10 @@ export type ContinuationEvent = {
   error?: { name?: string }
 }
 
+export type CancelNextContinuationResult = {
+  status: "cancelled" | "no_pending"
+}
+
 export function createTodoContinuationHandler(args: {
   sessionApi: SessionApi
   messageStore: MessageStore
@@ -33,6 +37,21 @@ export function createTodoContinuationHandler(args: {
   return {
     getState(sessionID: string) {
       return stateStore.getExistingState(sessionID)
+    },
+
+    async cancelNextContinuation(sessionID: string): Promise<CancelNextContinuationResult> {
+      const state = stateStore.getExistingState(sessionID)
+
+      if (!state?.pendingContinuation) {
+        return { status: "no_pending" }
+      }
+
+      state.continuationStopped = true
+      state.pendingContinuation = false
+      state.countdownCancel?.()
+      await args.toast.showCancelled("Next continuation cancelled.")
+
+      return { status: "cancelled" }
     },
 
     async handleEvent(event: ContinuationEvent): Promise<void> {
@@ -91,7 +110,7 @@ export function createTodoContinuationHandler(args: {
           now,
           hasPendingQuestion: hasPendingQuestion(messageInfo),
           hasRunningBackgroundTask: args.backgroundTaskProbe.hasRunningTask(event.sessionID),
-          isContinuationStopped: false,
+          isContinuationStopped: Boolean(state.continuationStopped),
           agent: messageInfo?.agent,
           skipAgents: args.skipAgents,
         })
@@ -110,6 +129,8 @@ export function createTodoContinuationHandler(args: {
           })
           return
         }
+
+        state.pendingContinuation = true
 
         const countdownCompleted = await runCountdown({
           seconds: args.countdownSeconds,
@@ -136,7 +157,7 @@ export function createTodoContinuationHandler(args: {
           now: Date.now(),
           hasPendingQuestion: hasPendingQuestion(freshMessageInfo),
           hasRunningBackgroundTask: args.backgroundTaskProbe.hasRunningTask(event.sessionID),
-          isContinuationStopped: false,
+          isContinuationStopped: Boolean(state.continuationStopped),
           agent: freshMessageInfo?.agent,
           skipAgents: args.skipAgents,
         })
@@ -145,6 +166,13 @@ export function createTodoContinuationHandler(args: {
           args.logger.debug("skip continuation after recheck", freshDecision)
           return
         }
+
+        if (state.continuationStopped) {
+          args.logger.debug("skip continuation due to user cancel", { sessionID: event.sessionID })
+          return
+        }
+
+        state.pendingContinuation = false
 
         await injectContinuation({
           sessionID: event.sessionID,
@@ -168,6 +196,8 @@ export function createTodoContinuationHandler(args: {
         if (stateStore.getExistingState(event.sessionID)) {
           state.inFlight = false
           state.countdownCancel = undefined
+          state.continuationStopped = false
+          state.pendingContinuation = false
         }
       }
     },
