@@ -4,6 +4,7 @@
 
 | Card | Scope | Tags | Date |
 |---|---|---|---|
+| `opencode-plugin-command-enabled-tools-are-experimental` | project | opencode, plugin, command, tool, experimental | 2026-04-02 |
 | `readme-should-not-document-internal-plugin-factories` | project | readme, docs, plugin, api, exports | 2026-04-02 |
 | `plugin-tool-context-missing-session-id` | project | opencode, plugin, tool, session-id, sdk | 2026-04-02 |
 | `release-workflow-mutually-exclusive-inputs` | project | github-actions, release, workflow-dispatch, validation, inputs | 2026-04-01 |

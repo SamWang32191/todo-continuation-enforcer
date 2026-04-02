@@ -645,6 +645,89 @@ describe("todo continuation enforcer integration", () => {
     await expect(cancelTool?.execute({ sessionID: "s1" }, {})).resolves.toContain("No pending continuation")
   })
 
+  it("plugin tool 會以 command-enabled tool 暴露 cancel_next_continuation", async () => {
+    const plugin = createPlugin({ countdownSeconds: 5 })
+    const hooks = await plugin({
+      client: {
+        session: {
+          todo: async () => ({ data: [] }),
+          messages: async () => ({ data: [] }),
+          promptAsync: async () => ({ data: undefined }),
+        },
+        tui: {
+          showToast: async () => ({ data: undefined }),
+        },
+      },
+      directory: "/tmp",
+      project: {} as never,
+      worktree: "/tmp",
+      serverUrl: new URL("http://localhost"),
+      $: {} as never,
+    })
+
+    const cancelTool = (hooks as never as {
+      tool?: Record<string, { command?: boolean; directExecution?: boolean }>
+    }).tool?.cancel_next_continuation
+
+    expect(cancelTool).toMatchObject({ command: true, directExecution: true })
+  })
+
+  it("plugin tool 不傳 sessionID 時會使用 context.sessionID", async () => {
+    const plugin = createPlugin({ countdownSeconds: 5 })
+    const hooks = await plugin({
+      client: {
+        session: {
+          todo: async () => ({ data: [] }),
+          messages: async () => ({ data: [] }),
+          promptAsync: async () => ({ data: undefined }),
+        },
+        tui: {
+          showToast: async () => ({ data: undefined }),
+        },
+      },
+      directory: "/tmp",
+      project: {} as never,
+      worktree: "/tmp",
+      serverUrl: new URL("http://localhost"),
+      $: {} as never,
+    })
+
+    const cancelTool = (hooks as never as {
+      tool?: Record<string, { execute(args: any, context: any): Promise<string> }>
+    }).tool?.cancel_next_continuation
+
+    expect(cancelTool).toBeDefined()
+    await expect(cancelTool?.execute({}, { sessionID: "ctx-s1" })).resolves.toContain("ctx-s1")
+  })
+
+  it("plugin tool 傳入 sessionID 時仍以顯式值為準", async () => {
+    const plugin = createPlugin({ countdownSeconds: 5 })
+    const hooks = await plugin({
+      client: {
+        session: {
+          todo: async () => ({ data: [] }),
+          messages: async () => ({ data: [] }),
+          promptAsync: async () => ({ data: undefined }),
+        },
+        tui: {
+          showToast: async () => ({ data: undefined }),
+        },
+      },
+      directory: "/tmp",
+      project: {} as never,
+      worktree: "/tmp",
+      serverUrl: new URL("http://localhost"),
+      $: {} as never,
+    })
+
+    const cancelTool = (hooks as never as {
+      tool?: Record<string, { execute(args: any, context: any): Promise<string> }>
+    }).tool?.cancel_next_continuation
+
+    expect(cancelTool).toBeDefined()
+    await expect(cancelTool?.execute({ sessionID: "explicit-s1" }, { sessionID: "ctx-s1" })).resolves.toContain("explicit-s1")
+  })
+
   it("injectPrompt 已開始後再取消，不會回報假成功", async () => {
     let releaseInject: (() => void) | undefined
     let markInjectStarted: (() => void) | undefined
