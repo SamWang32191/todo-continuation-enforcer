@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "bun:test"
 import { createEventHandler } from "../../src/plugin/event-handler"
 import { createPlugin } from "../../src/plugin/create-plugin"
 import { createTodoContinuationEnforcer } from "../../src/todo-continuation-enforcer"
+import { CONTINUATION_PROMPT } from "../../src/todo-continuation-enforcer/constants"
 import { createFakeBackgroundTaskProbe, createFakeCountdownToast, createFakeLogger, createFakeMessageStore, createFakeSessionApi, createMutableFakeMessageStore } from "../helpers/fakes"
 import { createControlledClock } from "../helpers/controlled-clock"
 
@@ -157,9 +158,7 @@ describe("todo continuation enforcer integration", () => {
     await enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
 
     expect(sessionApi.prompts).toHaveLength(1)
-    expect(sessionApi.prompts[0]).toContain(
-      "If you need a user response, use the Question tool instead of asking in plain text.",
-    )
+    expect(sessionApi.prompts[0]).toContain(CONTINUATION_PROMPT)
     expect(sessionApi.prompts[0]).toContain("Else incomplete tasks remain")
     expect(sessionApi.prompts[0]).toContain("Remaining todos")
   })

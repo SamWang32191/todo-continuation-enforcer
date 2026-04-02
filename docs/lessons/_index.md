@@ -4,6 +4,7 @@
 
 | Card | Scope | Tags | Date |
 |---|---|---|---|
+| `prompt-integration-tests-should-reference-exported-constants` | project | tests, prompts, constants, regression | 2026-04-03 |
 | `formal-command-events-should-backstop-tool-context-session-id` | project | opencode, plugin, command, session-id, fallback | 2026-04-03 |
 | `opencode-plugin-command-enabled-tools-are-experimental` | project | opencode, plugin, command, config, registration | 2026-04-02 |
 | `readme-should-not-document-internal-plugin-factories` | project | readme, docs, plugin, api, exports | 2026-04-02 |
