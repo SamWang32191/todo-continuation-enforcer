@@ -19,7 +19,9 @@ export async function injectContinuation(args: {
   model?: { providerID: string; modelID: string }
 }): Promise<void> {
   const remainingTodos = formatRemainingTodos(args.todos)
-  const prompt = `${CONTINUATION_PROMPT}\n\nRemaining todos:\n${remainingTodos}`
+  const remainingTodosHeading = "Remaining todos:"
+  const remainingTodosSection = `${remainingTodosHeading}\n${remainingTodos}`
+  const prompt = `${CONTINUATION_PROMPT}\n\n${remainingTodosSection}`
 
   await args.sessionApi.injectPrompt(args.sessionID, prompt, {
     agent: args.agent,
