@@ -1,4 +1,4 @@
-import type { Hooks, Plugin, PluginInput } from "@opencode-ai/plugin"
+import { tool, type Hooks, type Plugin, type PluginInput } from "@opencode-ai/plugin"
 
 import { createEventHandler } from "./event-handler"
 import { createNoopBackgroundTaskProbe } from "./adapters/background-task-probe"
@@ -21,6 +21,23 @@ export function createPlugin(options?: { countdownSeconds?: number }): Plugin {
 
     return {
       event: createEventHandler(enforcer.handleEvent),
+      tool: {
+        cancel_next_continuation: tool({
+          description: "Cancel the next pending continuation injection for a session",
+          args: {
+            sessionID: tool.schema.string(),
+          },
+          async execute(input) {
+            const result = await enforcer.cancelNextContinuation(input.sessionID)
+
+            if (result.status === "cancelled") {
+              return `Cancelled next continuation for session ${input.sessionID}.`
+            }
+
+            return `No pending continuation to cancel for session ${input.sessionID}.`
+          },
+        }),
+      },
     }
   }
 

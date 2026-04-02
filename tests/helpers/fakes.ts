@@ -30,6 +30,9 @@ export function createFakeCountdownToast() {
     async showCountdown(message: string) {
       messages.push(message)
     },
+    async showCancelled(message: string) {
+      messages.push(message)
+    },
   }
 }
 

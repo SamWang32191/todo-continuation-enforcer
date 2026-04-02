@@ -424,4 +424,164 @@ describe("todo continuation enforcer integration", () => {
     expect(sessionApi.prompts).toHaveLength(0)
     expect(toast.messages[0]).toBe("Resuming in 5s... (1 tasks remaining)")
   })
+
+  it("使用者可在 countdown 期間取消下一次注入，且之後新的 idle cycle 仍可繼續", async () => {
+    clock = createControlledClock()
+    const sessionApi = createFakeSessionApi()
+    const toastMessages: string[] = []
+    const enforcer = createTodoContinuationEnforcer({
+      sessionApi,
+      toast: {
+        async showCountdown(message: string) {
+          toastMessages.push(message)
+        },
+        async showCancelled(message: string) {
+          toastMessages.push(message)
+        },
+      } as never,
+      logger: createFakeLogger(),
+      backgroundTaskProbe: createFakeBackgroundTaskProbe(),
+      countdownSeconds: 5,
+    })
+
+    const idle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+    await clock.advance(1000)
+
+    await expect((enforcer as never as {
+      cancelNextContinuation(sessionID: string): Promise<{ status: string }>
+    }).cancelNextContinuation("s1")).resolves.toEqual({ status: "cancelled" })
+
+    await idle
+    expect(sessionApi.prompts).toHaveLength(0)
+    expect(toastMessages.some((message) => message.includes("cancelled"))).toBe(true)
+
+    const secondIdle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+    await clock.advance(5000)
+    await secondIdle
+    expect(sessionApi.prompts).toHaveLength(1)
+  })
+
+  it("使用者在 final recheck 邊界取消時仍不會注入", async () => {
+    clock = createControlledClock()
+    let getTodosCallCount = 0
+    let releaseFreshTodos: (() => void) | undefined
+    const prompts: string[] = []
+
+    const sessionApi = {
+      async getTodos() {
+        getTodosCallCount += 1
+
+        if (getTodosCallCount === 1) {
+          return [{ content: "finish", status: "pending", priority: "high" as const }]
+        }
+
+        await new Promise<void>((resolve) => {
+          releaseFreshTodos = resolve
+        })
+
+        return [{ content: "finish", status: "pending", priority: "high" as const }]
+      },
+      async getLatestMessageInfo() {
+        return {
+          role: "assistant" as const,
+          agent: "sisyphus",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          text: "keep going",
+        }
+      },
+      async injectPrompt(_sessionID: string, prompt: string) {
+        prompts.push(prompt)
+      },
+    }
+
+    const enforcer = createTodoContinuationEnforcer({
+      sessionApi,
+      logger: createFakeLogger(),
+      backgroundTaskProbe: createFakeBackgroundTaskProbe(),
+      countdownSeconds: 0.05,
+    })
+
+    const idle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+    await clock.advance(50)
+
+    await expect((enforcer as never as {
+      cancelNextContinuation(sessionID: string): Promise<{ status: string }>
+    }).cancelNextContinuation("s1")).resolves.toEqual({ status: "cancelled" })
+
+    releaseFreshTodos?.()
+    await idle
+
+    expect(prompts).toHaveLength(0)
+  })
+
+  it("plugin tool 會回報沒有可取消的 pending continuation", async () => {
+    const plugin = createPlugin({ countdownSeconds: 5 })
+    const hooks = await plugin({
+      client: {
+        session: {
+          todo: async () => ({
+            data: [{ content: "finish", status: "pending", priority: "high" }],
+          }),
+          messages: async () => ({
+            data: [
+              {
+                info: { role: "assistant", agent: "sisyphus", model: { providerID: "openai", modelID: "gpt-5" } },
+                parts: [{ type: "text", text: "keep going" }],
+              },
+            ],
+          }),
+          promptAsync: async () => ({ data: undefined }),
+        },
+        tui: {
+          showToast: async () => ({ data: undefined }),
+        },
+      },
+      directory: "/tmp",
+      project: {} as never,
+      worktree: "/tmp",
+      serverUrl: new URL("http://localhost"),
+      $: {} as never,
+    })
+
+    const cancelTool = (hooks as never as {
+      tool?: Record<string, { execute(args: { sessionID: string }, context: unknown): Promise<string> }>
+    }).tool?.cancel_next_continuation
+
+    expect(cancelTool).toBeDefined()
+    await expect(cancelTool?.execute({ sessionID: "s1" }, {})).resolves.toContain("No pending continuation")
+  })
+
+  it("injectPrompt 已開始後再取消，不會回報假成功", async () => {
+    let releaseInject: (() => void) | undefined
+    let markInjectStarted: (() => void) | undefined
+    const injectStarted = new Promise<void>((resolve) => {
+      markInjectStarted = resolve
+    })
+    const sessionApi = createFakeSessionApi({
+      injectPrompt: async () => {
+        markInjectStarted?.()
+        await new Promise<void>((resolve) => {
+          releaseInject = resolve
+        })
+      },
+    })
+
+    const enforcer = createTodoContinuationEnforcer({
+      sessionApi,
+      logger: createFakeLogger(),
+      backgroundTaskProbe: createFakeBackgroundTaskProbe(),
+      countdownSeconds: 0,
+    })
+
+    const idle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+    await injectStarted
+
+    await expect((enforcer as never as {
+      cancelNextContinuation(sessionID: string): Promise<{ status: string }>
+    }).cancelNextContinuation("s1")).resolves.toEqual({ status: "no_pending" })
+
+    releaseInject?.()
+    await idle
+    expect(sessionApi.prompts).toHaveLength(1)
+  })
 })

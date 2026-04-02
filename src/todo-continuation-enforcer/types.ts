@@ -11,6 +11,8 @@ export interface SessionState {
   countdownTimer?: ReturnType<typeof setTimeout>
   countdownInterval?: ReturnType<typeof setInterval>
   countdownCancel?: () => void
+  continuationStopped?: boolean
+  pendingContinuation?: boolean
   isRecovering?: boolean
   countdownStartedAt?: number
   abortDetectedAt?: number
