@@ -11,4 +11,23 @@ export const MAX_STAGNATION_COUNT = 3
 export const MAX_CONSECUTIVE_FAILURES = 5
 export const FAILURE_RESET_WINDOW_MS = 5 * 60_000
 
-export const CONTINUATION_PROMPT = `${createSystemDirective("TODO_CONTINUATION")}\nIf you need a user response or confirmation, use the QUESTION TOOL ask again instead of asking in plain text.\n\nElse incomplete tasks remain in your todo list. Continue working on the next pending task.\n- Proceed without asking for permission\n- Mark each task complete when finished\n- Do not stop until all tasks are done\n- If you believe all work is already complete, critically re-check each todo item and update the todo list accordingly.`
+const QUESTION_TOOL_INSTRUCTION =
+  "If you need a user response or confirmation, use the QUESTION TOOL ask again instead of asking in plain text."
+
+const CONTINUATION_BEHAVIOR_LINES = [
+  "- Proceed without asking for permission",
+  "- Mark each task complete when finished",
+  "- Do not stop until all tasks are done",
+  "- If you believe all work is already complete, critically re-check each todo item and update the todo list accordingly.",
+]
+
+const CONTINUATION_CONTEXT_PARAGRAPH = `${createSystemDirective("TODO_CONTINUATION")}\n${QUESTION_TOOL_INSTRUCTION}`
+
+const CONTINUATION_ACTION_PARAGRAPH = [
+  "Else incomplete tasks remain in your todo list. Continue working on the next pending task.",
+  ...CONTINUATION_BEHAVIOR_LINES,
+].join("\n")
+
+const CONTINUATION_PROMPT_PARAGRAPHS = [CONTINUATION_CONTEXT_PARAGRAPH, CONTINUATION_ACTION_PARAGRAPH]
+
+export const CONTINUATION_PROMPT = CONTINUATION_PROMPT_PARAGRAPHS.join("\n\n")
