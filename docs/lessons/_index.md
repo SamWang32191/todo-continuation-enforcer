@@ -4,6 +4,7 @@
 
 | Card | Scope | Tags | Date |
 |---|---|---|---|
+| `opencode-plugin-design-should-check-local-installed-types` | project | opencode, plugin, sdk, types, version | 2026-04-03 |
 | `exact-output-tests-should-use-literal-expected-strings` | project | tests, prompts, regression, readability | 2026-04-03 |
 | `prompt-integration-tests-should-reference-exported-constants` | project | tests, prompts, constants, regression | 2026-04-03 |
 | `formal-command-events-should-backstop-tool-context-session-id` | project | opencode, plugin, command, session-id, fallback | 2026-04-03 |
