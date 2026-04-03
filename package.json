@@ -1,6 +1,6 @@
 {
   "name": "todo-continuation-enforcer",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Standalone OpenCode plugin that continues unfinished todos on session idle.",
   "type": "module",
   "main": "./dist/index.js",
