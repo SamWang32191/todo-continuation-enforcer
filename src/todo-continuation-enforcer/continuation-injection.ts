@@ -21,7 +21,8 @@ export async function injectContinuation(args: {
   const remainingTodos = formatRemainingTodos(args.todos)
   const remainingTodosHeading = "Remaining todos:"
   const remainingTodosSection = `${remainingTodosHeading}\n${remainingTodos}`
-  const prompt = `${CONTINUATION_PROMPT}\n\n${remainingTodosSection}`
+  const promptBody = `${CONTINUATION_PROMPT}\n\n${remainingTodosSection}`
+  const prompt = `<system-reminder>\n${promptBody}\n</system-reminder>`
 
   await args.sessionApi.injectPrompt(args.sessionID, prompt, {
     agent: args.agent,

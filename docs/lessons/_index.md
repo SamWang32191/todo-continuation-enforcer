@@ -4,6 +4,7 @@
 
 | Card | Scope | Tags | Date |
 |---|---|---|---|
+| `tests-should-use-shared-fixtures-for-adapter-interfaces` | project | tests, fixtures, adapters, maintainability | 2026-04-03 |
 | `git-pull-after-merged-pr-with-local-duplicate-changes` | project | git, pull, stash, worktree, cleanup | 2026-04-03 |
 | `opencode-plugin-design-should-check-local-installed-types` | project | opencode, plugin, sdk, types, version | 2026-04-03 |
 | `exact-output-tests-should-use-literal-expected-strings` | project | tests, prompts, regression, readability | 2026-04-03 |

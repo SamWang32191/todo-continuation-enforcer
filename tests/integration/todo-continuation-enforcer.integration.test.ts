@@ -159,9 +159,11 @@ describe("todo continuation enforcer integration", () => {
     await enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
 
     expect(sessionApi.prompts).toHaveLength(1)
+    expect(sessionApi.prompts[0]).toContain("<system-reminder>\n")
+    expect(sessionApi.prompts[0]).toMatch(/\n<\/system-reminder>$/)
     expect(sessionApi.prompts[0]).toContain(CONTINUATION_PROMPT)
     expect(sessionApi.prompts[0]).toContain("Else incomplete tasks remain")
-    expect(sessionApi.prompts[0]).toContain("Remaining todos")
+    expect(sessionApi.prompts[0]).toContain("Remaining todos:")
   })
 
   it("10 秒 countdown 會顯示正確 toast 文案並在完成後注入 continuation", async () => {

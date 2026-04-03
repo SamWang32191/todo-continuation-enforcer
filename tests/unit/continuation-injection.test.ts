@@ -3,25 +3,27 @@ import { describe, expect, it } from "bun:test"
 import { CONTINUATION_PROMPT } from "../../src/todo-continuation-enforcer/constants"
 import { createTodoContinuationEnforcer } from "../../src/todo-continuation-enforcer"
 import { injectContinuation } from "../../src/todo-continuation-enforcer/continuation-injection"
-import { createFakeBackgroundTaskProbe, createFakeLogger } from "../helpers/fakes"
-import type { MessageInfo, SessionApi } from "../../src/plugin/adapters/session-api"
+import { createFakeBackgroundTaskProbe, createFakeLogger, createFakeSessionApi } from "../helpers/fakes"
+import type { MessageInfo } from "../../src/plugin/adapters/session-api"
 import type { Todo } from "../../src/todo-continuation-enforcer/types"
 
 describe("injectContinuation", () => {
-  it("remaining todos 會包含 in_progress 且排除 completed", async () => {
-    let prompt = ""
+  it("injectContinuation 會用 system-reminder 包住完整 continuation prompt", async () => {
+    const sessionApi = createFakeSessionApi({ latestMessageInfo: undefined, todos: [] })
 
-    const sessionApi: SessionApi = {
-      async getTodos() {
-        return []
-      },
-      async getLatestMessageInfo() {
-        return undefined
-      },
-      async injectPrompt(_sessionID, nextPrompt) {
-        prompt = nextPrompt
-      },
-    }
+    await injectContinuation({
+      sessionID: "s1",
+      sessionApi,
+      todos: [{ content: "finish docs", status: "pending", priority: "high" }],
+    })
+
+    expect(sessionApi.prompts[0]).toBe(
+      `<system-reminder>\n${CONTINUATION_PROMPT}\n\nRemaining todos:\n- [pending] finish docs\n</system-reminder>`,
+    )
+  })
+
+  it("remaining todos 會包含 in_progress 且排除 completed", async () => {
+    const sessionApi = createFakeSessionApi({ latestMessageInfo: undefined, todos: [] })
 
     await injectContinuation({
       sessionID: "s1",
@@ -33,9 +35,9 @@ describe("injectContinuation", () => {
       ],
     })
 
-    expect(prompt).toContain("[pending] pending")
-    expect(prompt).toContain("[in_progress] progress")
-    expect(prompt).not.toContain("[completed] done")
+    expect(sessionApi.prompts[0]).toContain("[pending] pending")
+    expect(sessionApi.prompts[0]).toContain("[in_progress] progress")
+    expect(sessionApi.prompts[0]).not.toContain("[completed] done")
   })
 
   it("countdown 完成後 fresh recheck 通過時才會 inject continuation", async () => {
@@ -44,6 +46,7 @@ describe("injectContinuation", () => {
     let injectCalls = 0
 
     const sessionApi = {
+      async abort() {},
       async getTodos() {
         getTodosCalls += 1
         return [{ content: "finish", status: "pending", priority: "high" }] satisfies Todo[]
@@ -71,44 +74,8 @@ describe("injectContinuation", () => {
     expect(injectCalls).toBe(1)
   })
 
-  it("injectContinuation 會組出 TODO_CONTINUATION 與 remaining todos", async () => {
-    let prompt = ""
-
-    const sessionApi: SessionApi = {
-      async getTodos() {
-        return [] satisfies Todo[]
-      },
-      async getLatestMessageInfo() {
-        return undefined
-      },
-      async injectPrompt(_sessionID, nextPrompt) {
-        prompt = nextPrompt
-      },
-    }
-
-    await injectContinuation({
-      sessionID: "s1",
-      sessionApi,
-      todos: [{ content: "finish docs", status: "pending", priority: "high" }],
-    })
-
-    expect(prompt).toBe(`${CONTINUATION_PROMPT}\n\nRemaining todos:\n- [pending] finish docs`)
-  })
-
   it("多筆 remaining todos 之間會用單一換行分隔", async () => {
-    let prompt = ""
-
-    const sessionApi: SessionApi = {
-      async getTodos() {
-        return [] satisfies Todo[]
-      },
-      async getLatestMessageInfo() {
-        return undefined
-      },
-      async injectPrompt(_sessionID, nextPrompt) {
-        prompt = nextPrompt
-      },
-    }
+    const sessionApi = createFakeSessionApi({ latestMessageInfo: undefined, todos: [] })
 
     await injectContinuation({
       sessionID: "s1",
@@ -119,7 +86,7 @@ describe("injectContinuation", () => {
       ],
     })
 
-    expect(prompt).toContain("Remaining todos:\n- [pending] first\n- [in_progress] second")
-    expect(prompt).not.toContain("Remaining todos:\n- [pending] first\n\n- [in_progress] second")
+    expect(sessionApi.prompts[0]).toContain("Remaining todos:\n- [pending] first\n- [in_progress] second")
+    expect(sessionApi.prompts[0]).not.toContain("Remaining todos:\n- [pending] first\n\n- [in_progress] second")
   })
 })
