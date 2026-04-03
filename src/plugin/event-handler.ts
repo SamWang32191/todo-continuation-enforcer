@@ -1,7 +1,7 @@
 import type { Hooks } from "@opencode-ai/plugin"
 
 import type { ContinuationEvent } from "../todo-continuation-enforcer/handler"
-import { CANCEL_NEXT_CONTINUATION_COMMAND_NAME } from "./command-definitions"
+import { STOP_CONTINUATION_COMMAND_NAME } from "./command-definitions"
 
 type PluginEventType = ContinuationEvent["type"] | "tui.command.execute"
 
@@ -25,7 +25,7 @@ function isSessionInterruptCommand(event: unknown): boolean {
 
   const properties = isRecord(event.properties) ? event.properties : undefined
   return properties?.command === "session.interrupt"
-    || properties?.command === CANCEL_NEXT_CONTINUATION_COMMAND_NAME
+    || properties?.command === STOP_CONTINUATION_COMMAND_NAME
 }
 
 function getSessionID(event: unknown): string | undefined {
@@ -92,13 +92,16 @@ export function createEventHandler(handleEvent: (event: ContinuationEvent) => Pr
     }
 
     const sessionID = getSessionID(event)
+    const type = event.type === "tui.command.execute"
+      ? (isRecord(event.properties) && event.properties.command === STOP_CONTINUATION_COMMAND_NAME ? "session.stop" : "session.interrupt")
+      : event.type
 
     if (!sessionID) {
       return
     }
 
     await handleEvent({
-      type: event.type === "tui.command.execute" ? "session.interrupt" : event.type,
+      type,
       sessionID,
       error: getContinuationError(event),
     })

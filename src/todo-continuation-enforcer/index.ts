@@ -16,6 +16,7 @@ export function createTodoContinuationEnforcer(args: {
   toast?: CountdownToast
   countdownSeconds?: number
   skipAgents?: string[]
+  isContinuationStopped?: (sessionID: string) => boolean
 }) {
   return createTodoContinuationHandler({
     sessionApi: args.sessionApi,
@@ -29,5 +30,6 @@ export function createTodoContinuationEnforcer(args: {
     toast: args.toast ?? createNoopCountdownToast(),
     countdownSeconds: args.countdownSeconds ?? COUNTDOWN_SECONDS,
     skipAgents: args.skipAgents,
+    isContinuationStopped: args.isContinuationStopped,
   })
 }

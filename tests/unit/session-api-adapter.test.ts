@@ -173,4 +173,29 @@ describe("createSdkSessionApi runtime narrowing", () => {
       text: "keep going",
     })
   })
+
+  it("abort 會轉呼叫 SDK session.abort", async () => {
+    const abortCalls: Array<{ id: string; directory: string }> = []
+    const api = createSdkSessionApi({
+      client: {
+        session: {
+          todo: async () => ({ data: [] }),
+          messages: async () => ({ data: [] }),
+          promptAsync: async () => ({ data: undefined }),
+          abort: async (args: { path: { id: string }; query: { directory: string } }) => {
+            abortCalls.push({ id: args.path.id, directory: args.query.directory })
+          },
+        },
+      },
+      directory: "/tmp",
+      worktree: "/tmp",
+      project: {} as never,
+      serverUrl: new URL("http://localhost"),
+      $: {} as never,
+    })
+
+    await api.abort("s1")
+
+    expect(abortCalls).toEqual([{ id: "s1", directory: "/tmp" }])
+  })
 })

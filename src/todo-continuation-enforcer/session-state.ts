@@ -26,19 +26,14 @@ export class SessionStateStore {
 
   private createState(sessionId: string): SessionState {
     return {
-      countdownStartedAt: Date.now(),
       lastIncompleteCount: 0,
       lastInjectedAt: undefined,
-      awaitingPostInjectionProgressCheck: false,
       inFlight: false,
       countdownCancel: undefined,
-      continuationStopped: false,
       pendingContinuation: false,
       stagnationCount: 0,
       consecutiveFailures: 0,
       recentCompactionAt: undefined,
-      recentCompactionEpoch: undefined,
-      acknowledgedCompactionEpoch: undefined,
     }
   }
 
@@ -62,7 +57,6 @@ export class SessionStateStore {
       state.countdownInterval = undefined
     }
 
-    state.continuationStopped = false
     state.pendingContinuation = false
   }
 }

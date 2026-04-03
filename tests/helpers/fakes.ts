@@ -66,9 +66,11 @@ export function createFakeSessionApi(args?: {
   }) => Promise<void>
 }) {
   const prompts: string[] = []
+  const abortCalls: string[] = []
 
-  const sessionApi: SessionApi & { prompts: string[] } = {
+  const sessionApi: SessionApi & { prompts: string[]; abortCalls: string[] } = {
     prompts,
+    abortCalls,
     async getTodos() {
       return args?.todos ?? [{ content: "finish", status: "pending", priority: "high" }]
     },
@@ -88,6 +90,9 @@ export function createFakeSessionApi(args?: {
       prompts.push(prompt)
       await args?.injectPrompt?.(sessionID, prompt, options)
     },
+    async abort(sessionID) {
+      abortCalls.push(sessionID)
+    },
   }
 
   return sessionApi
@@ -96,17 +101,24 @@ export function createFakeSessionApi(args?: {
 export function createMutableFakeSessionApi(args?: {
   todos?: Todo[]
   latestMessageInfo?: MessageInfo
+  injectPrompt?: (sessionID: string, prompt: string, options?: {
+    agent?: string
+    model?: { providerID: string; modelID: string }
+  }) => Promise<void>
 }) {
   let todos = args?.todos ?? [{ content: "finish", status: "pending", priority: "high" }]
   let latestMessageInfo = args?.latestMessageInfo
   const prompts: string[] = []
+  const abortCalls: string[] = []
 
   const sessionApi: SessionApi & {
     prompts: string[]
+    abortCalls: string[]
     setTodos(next: Todo[]): void
     setLatestMessageInfo(next: MessageInfo | undefined): void
   } = {
     prompts,
+    abortCalls,
     setTodos(next) {
       todos = next
     },
@@ -122,6 +134,9 @@ export function createMutableFakeSessionApi(args?: {
     async injectPrompt(sessionID, prompt, options) {
       prompts.push(prompt)
       await args?.injectPrompt?.(sessionID, prompt, options)
+    },
+    async abort(sessionID) {
+      abortCalls.push(sessionID)
     },
   }
 

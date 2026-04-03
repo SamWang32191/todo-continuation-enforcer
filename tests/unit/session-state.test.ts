@@ -12,7 +12,6 @@ describe("SessionStateStore", () => {
     expect(typedState.consecutiveFailures).toBe(0)
 
     expect(state.lastIncompleteCount).toBe(0)
-    expect(state.awaitingPostInjectionProgressCheck).toBe(false)
     expect(state.inFlight).toBe(false)
 
     state.countdownTimer = setTimeout(() => {}, 1000)

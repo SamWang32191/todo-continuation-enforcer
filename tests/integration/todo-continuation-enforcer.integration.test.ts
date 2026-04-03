@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test"
 
 import { createEventHandler } from "../../src/plugin/event-handler"
 import { createPlugin } from "../../src/plugin/create-plugin"
+import { createStopContinuationGuard } from "../../src/stop-continuation-guard/hook"
 import { createTodoContinuationEnforcer } from "../../src/todo-continuation-enforcer"
 import { CONTINUATION_PROMPT } from "../../src/todo-continuation-enforcer/constants"
 import { createFakeBackgroundTaskProbe, createFakeCountdownToast, createFakeLogger, createFakeMessageStore, createFakeSessionApi, createMutableFakeMessageStore } from "../helpers/fakes"
@@ -119,7 +120,7 @@ describe("todo continuation enforcer integration", () => {
     expect(calls).toEqual([{ type: "session.interrupt", sessionID: "s1" }])
   })
 
-  it("tui.command.execute 的 cancel-next-continuation 也會轉給 handler", async () => {
+  it("tui.command.execute 的 stop-continuation 會轉成 session.stop", async () => {
     const calls: Array<{ type: string; sessionID: string }> = []
     const handler = createEventHandler(async (event) => {
       calls.push(event)
@@ -128,11 +129,11 @@ describe("todo continuation enforcer integration", () => {
     await handler({
       event: {
         type: "tui.command.execute",
-        properties: { sessionID: "s1", command: "cancel-next-continuation" },
+        properties: { sessionID: "s1", command: "stop-continuation" },
       } as never,
     })
 
-    expect(calls).toEqual([{ type: "session.interrupt", sessionID: "s1" }])
+    expect(calls).toEqual([{ type: "session.stop", sessionID: "s1" }])
   })
 
   it("session.idle 正常 payload 仍會轉給 handler", async () => {
@@ -274,6 +275,27 @@ describe("todo continuation enforcer integration", () => {
     await idle
 
     expect(sessionApi.prompts).toHaveLength(0)
+  })
+
+  it("fresh recheck 後、inject 前 stop 會阻擋最終注入", async () => {
+    const sessionApi = createFakeSessionApi()
+    let stopChecks = 0
+
+    const enforcer = createTodoContinuationEnforcer({
+      sessionApi,
+      logger: createFakeLogger(),
+      backgroundTaskProbe: createFakeBackgroundTaskProbe(),
+      countdownSeconds: 0,
+      isContinuationStopped: () => {
+        stopChecks += 1
+        return stopChecks >= 4
+      },
+    })
+
+    await enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+
+    expect(sessionApi.prompts).toHaveLength(0)
+    expect(stopChecks).toBe(4)
   })
 
   it("latest assistant message 是 pending question 時不 inject", async () => {
@@ -461,6 +483,60 @@ describe("todo continuation enforcer integration", () => {
     expect(toast.messages[0]).toBe("Resuming in 5s... (1 tasks remaining)")
   })
 
+  it("raw session.interrupt 只取消當前 pending cycle，下一個 idle 可直接續跑", async () => {
+    clock = createControlledClock()
+    const sessionApi = createFakeSessionApi()
+    const toast = createFakeCountdownToast()
+
+    const enforcer = createTodoContinuationEnforcer({
+      sessionApi,
+      logger: createFakeLogger(),
+      backgroundTaskProbe: createFakeBackgroundTaskProbe(),
+      toast,
+      countdownSeconds: 5,
+    })
+
+    const firstIdle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+    await clock.advance(1000)
+    await enforcer.handleEvent({ type: "session.interrupt", sessionID: "s1" } as never)
+    await firstIdle
+    await clock.advance(5000)
+
+    expect(sessionApi.prompts).toHaveLength(0)
+
+    const secondIdle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+    await clock.advance(5000)
+    await secondIdle
+
+    expect(sessionApi.prompts).toHaveLength(1)
+    expect(toast.messages.some((message) => message.includes("stopped"))).toBe(true)
+  })
+
+  it("cancelPendingWork 會取消 countdown 並顯示取消 toast", async () => {
+    clock = createControlledClock()
+    const sessionApi = createFakeSessionApi()
+    const toast = createFakeCountdownToast()
+
+    const enforcer = createTodoContinuationEnforcer({
+      sessionApi,
+      logger: createFakeLogger(),
+      backgroundTaskProbe: createFakeBackgroundTaskProbe(),
+      toast,
+      countdownSeconds: 5,
+    })
+
+    const idle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+    await clock.advance(1000)
+
+    await expect(enforcer.cancelPendingWork("s1")).resolves.toEqual({ status: "cancelled" })
+
+    await idle
+    await clock.advance(5000)
+
+    expect(sessionApi.prompts).toHaveLength(0)
+    expect(toast.messages.some((message) => message.includes("stopped"))).toBe(true)
+  })
+
   it("countdown 期間 todo 變 completed 後不會注入", async () => {
     clock = createControlledClock()
     let todos = [{ content: "finish", status: "in_progress", priority: "high" as const }]
@@ -479,6 +555,7 @@ describe("todo continuation enforcer integration", () => {
       async injectPrompt(_sessionID: string, prompt: string) {
         prompts.push(prompt)
       },
+      async abort(_sessionID: string) {},
     }
 
     const enforcer = createTodoContinuationEnforcer({
@@ -537,40 +614,90 @@ describe("todo continuation enforcer integration", () => {
     expect(toast.messages[0]).toBe("Resuming in 5s... (1 tasks remaining)")
   })
 
-  it("使用者可在 countdown 期間取消下一次注入，且之後新的 idle cycle 仍可繼續", async () => {
+  it("stop 後新的 idle 不應續跑，直到 chat.message 清除 stop state", async () => {
     clock = createControlledClock()
-    const sessionApi = createFakeSessionApi()
+    const promptCalls: unknown[] = []
+    const abortCalls: string[] = []
     const toastMessages: string[] = []
-    const enforcer = createTodoContinuationEnforcer({
-      sessionApi,
-      toast: {
-        async showCountdown(message: string) {
-          toastMessages.push(message)
+    const plugin = createPlugin({ countdownSeconds: 5 })
+    const hooks = await plugin({
+      client: {
+        session: {
+          todo: async () => ({ data: [{ content: "finish", status: "pending", priority: "high" }] }),
+          messages: async () => ({
+            data: [
+              {
+                info: { role: "assistant", agent: "sisyphus", model: { providerID: "openai", modelID: "gpt-5" } },
+                parts: [{ type: "text", text: "keep going" }],
+              },
+            ],
+          }),
+          promptAsync: async (args: unknown) => {
+            promptCalls.push(args)
+          },
+          abort: async (sessionID: string) => {
+            abortCalls.push(sessionID)
+          },
         },
-        async showCancelled(message: string) {
-          toastMessages.push(message)
+        tui: {
+          showToast: async (options?: { body?: { message?: string } }) => {
+            const message = options?.body?.message
+            if (message) toastMessages.push(message)
+          },
         },
-      } as never,
-      logger: createFakeLogger(),
-      backgroundTaskProbe: createFakeBackgroundTaskProbe(),
-      countdownSeconds: 5,
+      },
+      directory: "/tmp",
+      project: {} as never,
+      worktree: "/tmp",
+      serverUrl: new URL("http://localhost"),
+      $: {} as never,
     })
 
-    const idle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+    const idle = hooks.event?.({ event: { type: "session.idle", properties: { sessionID: "s1" } } as never })
     await clock.advance(1000)
 
-    await expect((enforcer as never as {
-      cancelNextContinuation(sessionID: string): Promise<{ status: string }>
-    }).cancelNextContinuation("s1")).resolves.toEqual({ status: "cancelled" })
+    await hooks.event?.({
+      event: {
+        type: "tui.command.execute",
+        properties: { sessionID: "s1", command: "stop-continuation" },
+      } as never,
+    })
 
     await idle
-    expect(sessionApi.prompts).toHaveLength(0)
-    expect(toastMessages.some((message) => message.includes("cancelled"))).toBe(true)
+    expect(promptCalls).toHaveLength(0)
+    expect(abortCalls).toHaveLength(1)
+    expect(toastMessages.some((message) => message.includes("stopped"))).toBe(true)
 
-    const secondIdle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+    const secondIdle = hooks.event?.({ event: { type: "session.idle", properties: { sessionID: "s1" } } as never })
     await clock.advance(5000)
     await secondIdle
-    expect(sessionApi.prompts).toHaveLength(1)
+    expect(promptCalls).toHaveLength(0)
+
+    await hooks["chat.message"]?.({ sessionID: "s1" } as never, {} as never)
+
+    const thirdIdle = hooks.event?.({ event: { type: "session.idle", properties: { sessionID: "s1" } } as never })
+    await clock.advance(5000)
+    await thirdIdle
+    expect(promptCalls).toHaveLength(1)
+  })
+
+  it("session.deleted 會清 guard 與 runtime state", async () => {
+    const guard = createStopContinuationGuard()
+    const sessionApi = createFakeSessionApi()
+    const enforcer = createTodoContinuationEnforcer({
+      sessionApi,
+      logger: createFakeLogger(),
+      backgroundTaskProbe: createFakeBackgroundTaskProbe(),
+      countdownSeconds: 0,
+      isContinuationStopped: guard.isStopped,
+    })
+
+    guard.stop("s1")
+    await guard.event({ event: { type: "session.deleted", properties: { info: { id: "s1" } } } })
+    await enforcer.handleEvent({ type: "session.deleted", sessionID: "s1" })
+
+    expect(guard.isStopped("s1")).toBe(false)
+    expect(enforcer.getState("s1")).toBeUndefined()
   })
 
   it("使用者在 final recheck 邊界取消時仍不會注入", async () => {
@@ -578,6 +705,7 @@ describe("todo continuation enforcer integration", () => {
     let getTodosCallCount = 0
     let releaseFreshTodos: (() => void) | undefined
     const prompts: string[] = []
+    const guard = createStopContinuationGuard()
 
     const sessionApi = {
       async getTodos() {
@@ -604,6 +732,7 @@ describe("todo continuation enforcer integration", () => {
       async injectPrompt(_sessionID: string, prompt: string) {
         prompts.push(prompt)
       },
+      async abort(_sessionID: string) {},
     }
 
     const enforcer = createTodoContinuationEnforcer({
@@ -611,14 +740,14 @@ describe("todo continuation enforcer integration", () => {
       logger: createFakeLogger(),
       backgroundTaskProbe: createFakeBackgroundTaskProbe(),
       countdownSeconds: 0.05,
+      isContinuationStopped: guard.isStopped,
     })
 
     const idle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
     await clock.advance(50)
 
-    await expect((enforcer as never as {
-      cancelNextContinuation(sessionID: string): Promise<{ status: string }>
-    }).cancelNextContinuation("s1")).resolves.toEqual({ status: "cancelled" })
+    guard.stop("s1")
+    await enforcer.cancelPendingWork("s1")
 
     releaseFreshTodos?.()
     await idle
@@ -626,8 +755,9 @@ describe("todo continuation enforcer integration", () => {
     expect(prompts).toHaveLength(0)
   })
 
-  it("plugin tool 會回報沒有可取消的 pending continuation", async () => {
+  it("plugin tool 會使用 context.sessionID 並呼叫 session.abort", async () => {
     const plugin = createPlugin({ countdownSeconds: 5 })
+    const abortCalls: string[] = []
     const hooks = await plugin({
       client: {
         session: {
@@ -643,6 +773,10 @@ describe("todo continuation enforcer integration", () => {
             ],
           }),
           promptAsync: async () => ({ data: undefined }),
+          abort: async (args: { path: { id: string } }) => {
+            abortCalls.push(args.path.id)
+            return { data: undefined } as never
+          },
         },
         tui: {
           showToast: async () => ({ data: undefined }),
@@ -655,15 +789,51 @@ describe("todo continuation enforcer integration", () => {
       $: {} as never,
     })
 
-    const cancelTool = (hooks as never as {
-      tool?: Record<string, { execute(args: { sessionID: string }, context: unknown): Promise<string> }>
-    }).tool?.cancel_next_continuation
+    const stopTool = (hooks as never as {
+      tool?: Record<string, { execute(args: { sessionID?: string }, context: { sessionID: string }): Promise<string> }>
+    }).tool?.stop_continuation
 
-    expect(cancelTool).toBeDefined()
-    await expect(cancelTool?.execute({ sessionID: "s1" }, {})).resolves.toContain("No pending continuation")
+    expect(stopTool).toBeDefined()
+    await expect(stopTool?.execute({}, { sessionID: "s1" })).resolves.toContain("Stopped continuation for session s1")
+    expect(abortCalls).toEqual(["s1"])
   })
 
-  it("plugin config 會註冊 formal cancel-next-continuation command", async () => {
+  it("plugin stop-continuation command 會走 sticky stop 並在重複 stop 時回傳 already stopped", async () => {
+    const plugin = createPlugin({ countdownSeconds: 5 })
+    const abortCalls: string[] = []
+    const hooks = await plugin({
+      client: {
+        session: {
+          todo: async () => ({ data: [] }),
+          messages: async () => ({ data: [] }),
+          promptAsync: async () => ({ data: undefined }),
+          abort: async (args: { path: { id: string } }) => {
+            abortCalls.push(args.path.id)
+            return { data: undefined } as never
+          },
+        },
+        tui: {
+          showToast: async () => ({ data: undefined }),
+        },
+      },
+      directory: "/tmp",
+      project: {} as never,
+      worktree: "/tmp",
+      serverUrl: new URL("http://localhost"),
+      $: {} as never,
+    })
+
+    const stopTool = (hooks as never as {
+      tool?: Record<string, { execute(args: { sessionID?: string }, context: { sessionID: string }): Promise<string> }>
+    }).tool?.stop_continuation
+
+    expect(stopTool).toBeDefined()
+    await expect(stopTool?.execute({}, { sessionID: "s1" })).resolves.toContain("Stopped continuation for session s1")
+    await expect(stopTool?.execute({}, { sessionID: "s1" })).resolves.toContain("Continuation already stopped for session s1")
+    expect(abortCalls).toEqual(["s1", "s1"])
+  })
+
+  it("plugin config 會註冊 formal stop-continuation command", async () => {
     const plugin = createPlugin({ countdownSeconds: 5 })
     const hooks = await plugin({
       client: {
@@ -671,6 +841,7 @@ describe("todo continuation enforcer integration", () => {
           todo: async () => ({ data: [] }),
           messages: async () => ({ data: [] }),
           promptAsync: async () => ({ data: undefined }),
+          abort: async () => ({ data: undefined }),
         },
         tui: {
           showToast: async () => ({ data: undefined }),
@@ -698,11 +869,11 @@ describe("todo continuation enforcer integration", () => {
     const commands = config.command as Record<string, { name?: string; description?: string; template?: string }>
 
     expect(commands.existing).toBeDefined()
-    expect(commands["cancel-next-continuation"]).toMatchObject({
-      name: "cancel-next-continuation",
+    expect(commands["stop-continuation"]).toMatchObject({
+      name: "stop-continuation",
     })
-    expect(commands["cancel-next-continuation"]?.description).toContain("Cancel")
-    expect(commands["cancel-next-continuation"]?.template).toContain("cancel_next_continuation")
+    expect(commands["stop-continuation"]?.description).toContain("Stop")
+    expect(commands["stop-continuation"]?.template).toContain("stop_continuation")
   })
 
   it("plugin tool 不傳 sessionID 時會使用 context.sessionID", async () => {
@@ -713,6 +884,7 @@ describe("todo continuation enforcer integration", () => {
           todo: async () => ({ data: [] }),
           messages: async () => ({ data: [] }),
           promptAsync: async () => ({ data: undefined }),
+          abort: async () => ({ data: undefined }),
         },
         tui: {
           showToast: async () => ({ data: undefined }),
@@ -725,12 +897,12 @@ describe("todo continuation enforcer integration", () => {
       $: {} as never,
     })
 
-    const cancelTool = (hooks as never as {
+    const stopTool = (hooks as never as {
       tool?: Record<string, { execute(args: any, context: any): Promise<string> }>
-    }).tool?.cancel_next_continuation
+    }).tool?.stop_continuation
 
-    expect(cancelTool).toBeDefined()
-    await expect(cancelTool?.execute({}, { sessionID: "ctx-s1" })).resolves.toContain("ctx-s1")
+    expect(stopTool).toBeDefined()
+    await expect(stopTool?.execute({}, { sessionID: "ctx-s1" })).resolves.toContain("ctx-s1")
   })
 
   it("plugin tool 傳入 sessionID 時仍以顯式值為準", async () => {
@@ -741,6 +913,7 @@ describe("todo continuation enforcer integration", () => {
           todo: async () => ({ data: [] }),
           messages: async () => ({ data: [] }),
           promptAsync: async () => ({ data: undefined }),
+          abort: async () => ({ data: undefined }),
         },
         tui: {
           showToast: async () => ({ data: undefined }),
@@ -753,12 +926,12 @@ describe("todo continuation enforcer integration", () => {
       $: {} as never,
     })
 
-    const cancelTool = (hooks as never as {
+    const stopTool = (hooks as never as {
       tool?: Record<string, { execute(args: any, context: any): Promise<string> }>
-    }).tool?.cancel_next_continuation
+    }).tool?.stop_continuation
 
-    expect(cancelTool).toBeDefined()
-    await expect(cancelTool?.execute({ sessionID: "explicit-s1" }, { sessionID: "ctx-s1" })).resolves.toContain("explicit-s1")
+    expect(stopTool).toBeDefined()
+    await expect(stopTool?.execute({ sessionID: "explicit-s1" }, { sessionID: "ctx-s1" })).resolves.toContain("explicit-s1")
   })
 
   it("injectPrompt 已開始後再取消，不會回報假成功", async () => {
@@ -786,9 +959,7 @@ describe("todo continuation enforcer integration", () => {
     const idle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
     await injectStarted
 
-    await expect((enforcer as never as {
-      cancelNextContinuation(sessionID: string): Promise<{ status: string }>
-    }).cancelNextContinuation("s1")).resolves.toEqual({ status: "no_pending" })
+    await enforcer.handleEvent({ type: "session.interrupt", sessionID: "s1" })
 
     releaseInject?.()
     await idle

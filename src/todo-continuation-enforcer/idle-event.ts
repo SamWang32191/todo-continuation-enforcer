@@ -42,10 +42,6 @@ export async function shouldContinueOnIdle(args: {
     return { shouldInject: false, reason: "skip_agent", incompleteCount }
   }
 
-  if (args.state.isRecovering) {
-    return { shouldInject: false, reason: "recovering", incompleteCount }
-  }
-
   if (args.state.inFlight) {
     return { shouldInject: false, reason: "in_flight", incompleteCount }
   }
