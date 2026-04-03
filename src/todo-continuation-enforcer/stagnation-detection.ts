@@ -24,10 +24,3 @@ export function commitStagnationState(state: SessionState, preview: StagnationPr
   state.stagnationCount = preview.stagnationCount
   state.lastIncompleteCount = preview.lastIncompleteCount
 }
-
-export function updateStagnationState(state: SessionState, incompleteCount: number): boolean {
-  const preview = previewStagnationState(state, incompleteCount)
-  commitStagnationState(state, preview)
-
-  return preview.shouldContinue
-}

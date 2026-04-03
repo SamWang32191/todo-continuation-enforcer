@@ -82,7 +82,6 @@ export function createFakeSessionApi(args?: {
       return {
         agent: "sisyphus",
         model: { providerID: "openai", modelID: "gpt-5" },
-        tools: { write: true, edit: true },
         parts: [{ type: "text", text: "Continuing now." }],
       }
     },

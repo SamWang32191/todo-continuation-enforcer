@@ -16,7 +16,6 @@ export interface MessageInfo {
     providerID: string
     modelID: string
   }
-  tools?: Record<string, boolean>
   text?: string
   parts?: MessagePart[]
   role?: "user" | "assistant"
@@ -131,7 +130,7 @@ function isSdkMessage(value: unknown): value is SdkMessage {
     return false
   }
 
-  const { info, parts } = value
+  const { parts } = value
 
   return parts === undefined || (Array.isArray(parts) && parts.every(isSdkMessagePart))
 }

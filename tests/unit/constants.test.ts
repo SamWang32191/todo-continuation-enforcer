@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import { createSystemDirective } from "../../src/shared/system-directive"
-import { CONTINUATION_PROMPT, HOOK_NAME } from "../../src/todo-continuation-enforcer/constants"
+import { CONTINUATION_PROMPT } from "../../src/todo-continuation-enforcer/constants"
 
 const EXPECTED_CONTINUATION_DIRECTIVE = createSystemDirective("TODO_CONTINUATION")
 const EXPECTED_CONTINUATION_PROMPT = `${EXPECTED_CONTINUATION_DIRECTIVE}
@@ -14,7 +14,6 @@ Else incomplete tasks remain in your todo list. Continue working on the next pen
 
 describe("continuation constants", () => {
   it("使用 createSystemDirective 組裝 continuation prompt", () => {
-    expect(HOOK_NAME).toBe("todo-continuation-enforcer")
     expect(EXPECTED_CONTINUATION_DIRECTIVE).toBe("[TODO_CONTINUATION]")
     expect(CONTINUATION_PROMPT).toBe(EXPECTED_CONTINUATION_PROMPT)
   })

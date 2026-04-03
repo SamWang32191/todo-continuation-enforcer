@@ -1,6 +1,5 @@
 import { createSystemDirective } from "../shared/system-directive"
 
-export const HOOK_NAME = "todo-continuation-enforcer"
 export const DEFAULT_SKIP_AGENTS = ["prometheus", "compaction", "plan"]
 export const COUNTDOWN_SECONDS = 5
 export const TOAST_DURATION_MS = 900
@@ -9,7 +8,6 @@ export const COMPACTION_GUARD_MS = 60_000
 export const CONTINUATION_COOLDOWN_MS = 5_000
 export const MAX_STAGNATION_COUNT = 3
 export const MAX_CONSECUTIVE_FAILURES = 5
-export const FAILURE_RESET_WINDOW_MS = 5 * 60_000
 
 const QUESTION_TOOL_INSTRUCTION =
   "If you need a user response or confirmation, use the QUESTION TOOL ask again instead of asking in plain text."

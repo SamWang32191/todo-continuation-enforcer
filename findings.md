@@ -1,0 +1,32 @@
+# Findings
+
+## 2026-04-03
+- 專案目前沒有既有的 `task_plan.md` / `progress.md` / `findings.md`，本次任務需新建。
+- 已知優先優化項：`handler.ts` 過肥、countdown cleanup 分散、failure threshold 測試仍可補強。
+- 本次範圍排除 observability 相關調整。
+- `docs/lessons/_index.md` 顯示目前最接近本次任務的 lessons 主要落在 tests / fixtures / adapters 類別。
+- 已有 `docs/superpowers/specs/2026-04-03-core-simplification-design.md`，其中主軸是保守精簡 core；本次只取其中與 `handler` 拆分、cleanup 收斂、最小測試補強相關的子集合，不處理 `session-api.ts` 縮減與 noop 抽象整理。
+- 已載入 lesson `tests-should-use-shared-fixtures-for-adapter-interfaces`：補測試時優先重用既有 fake / fixture，不要在每個 case 手寫完整 adapter stub。
+- 現況已有 `consecutiveFailures` 的狀態測試與單次失敗整合測試，但尚未看到直接驗證 `too_many_failures` gate 的 case。
+- 使用者已核准採第 2 方案：`handler.ts` 模組化拆分 + cleanup 收斂 + failure threshold 測試補強。
+- worktree 目錄偏好為 `.worktrees/`，但因當前已有未提交變更，這一輪維持在現有工作區繼續。
+- `docs/superpowers/plans/` 與 `docs/superpowers/specs/` 皆已存在，可直接新增本次設計與計畫檔。
+- 已寫入 spec：`docs/superpowers/specs/2026-04-03-handler-modularization-failure-threshold-design.md`
+- 已寫入 plan：`docs/superpowers/plans/2026-04-03-handler-modularization-failure-threshold.md`
+- Task 1 已由子代理完成：`countdown.ts` 與 `session-state.ts` 共用新的 countdown cleanup helper，且 helper 採「只清除、不呼叫 callback」的安全介面。
+- Task 1 相關檔案目前 LSP diagnostics 為空。
+- Spec reviewer 曾指出 Task 1 初版遺失取消語意；後續已補成兩層 helper：resource cleanup + cancel cleanup，並補回歸測試。
+- `tests/unit/session-state.test.ts` 新增 case，覆蓋 `store.clear(sessionId)` 會終止進行中 countdown 並收斂 `pendingContinuation`。
+- LSP 對 `bun:test` 仍有既有 module 解析提示，但實際 Bun 測試可跑通，屬既有環境噪音。
+- Task 2 已拆出 `cleanup.ts` 與 `idle-cycle.ts`；`handler.ts` 明顯縮小為路由層。
+- 為維持既有取消 toast 行為，`session.interrupt` 暫時留在 `handler.ts` 直接走 `cancelNextContinuation()`，其餘 cleanup 事件已移入 `cleanup.ts`。
+- Task 2 已通過 spec compliance 與 code quality review；reviewer 額外提到 `idle-cycle` 在 countdown 後少了 state/store liveness guard，可視為後續 polish 項，但不阻擋目前 Task 2 關閉。
+- Task 3 已新增兩層測試：`idle-decision.test.ts` 的 `too_many_failures` gate，以及 integration 測試驗證達門檻後不再 inject continuation。
+- 測試檔的 LSP diagnostics 仍受既有 Bun/testing typing 噪音影響，因此以實際 `bun test` 結果為主。
+- 最終 review 指出新的 correctness 邊界：`idle-cycle.ts` 在 countdown 完成到 inject 前仍讓 `pendingContinuation === true`，但 `countdownCancel` 已清掉；此時 `cancelNextContinuation()` 會顯示取消成功卻未必真的阻止 inject。
+- 既有測試只覆蓋 countdown 期間的 `cancelPendingWork()`，尚未覆蓋 countdown 結束後、inject 前的取消窗口。
+- integration 既有案例 `cancelPendingWork 會取消 countdown 並顯示取消 toast` 只驗到 countdown 中途取消。
+- 另有 sticky-stop guard 測試在 countdown 結束後、fresh todos 尚未釋放時呼叫 `cancelPendingWork()`；那個 case 之所以不 inject，主要靠 `guard.stop("s1")`，不是 `cancelPendingWork()` 自身語意。
+- 目前的 root-cause 假說：`pendingContinuation` 被拿來表示整個 pending cycle，但 `runIdleCycle()` 在 countdown 結束後沒有再檢查它；因此 countdown 已完成且 `countdownCancel` 清空後，`cancelNextContinuation()` 只能改 flag/顯示 toast，卻不會阻止後續 recheck / inject。
+- 已新增 TDD regression：`countdown 結束後、inject 前 cancelPendingWork 會阻止最終注入`。
+- 最小修正落在 `idle-cycle.ts`：countdown 後與 final recheck 後，各補一次 `pendingContinuation` guard，讓 `cancelPendingWork()` 在 pre-inject 視窗也能真正生效。

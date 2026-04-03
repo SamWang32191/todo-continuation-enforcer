@@ -4,7 +4,7 @@ import { createEventHandler } from "../../src/plugin/event-handler"
 import { createPlugin } from "../../src/plugin/create-plugin"
 import { createStopContinuationGuard } from "../../src/stop-continuation-guard/hook"
 import { createTodoContinuationEnforcer } from "../../src/todo-continuation-enforcer"
-import { CONTINUATION_PROMPT } from "../../src/todo-continuation-enforcer/constants"
+import { CONTINUATION_PROMPT, MAX_CONSECUTIVE_FAILURES } from "../../src/todo-continuation-enforcer/constants"
 import { createFakeBackgroundTaskProbe, createFakeCountdownToast, createFakeLogger, createFakeMessageStore, createFakeSessionApi, createMutableFakeMessageStore } from "../helpers/fakes"
 import { createControlledClock } from "../helpers/controlled-clock"
 
@@ -416,6 +416,33 @@ describe("todo continuation enforcer integration", () => {
     expect(enforcer.getState("s1")?.consecutiveFailures).toBe(1)
   })
 
+  it("連續失敗達門檻後，後續 session.idle 不再 inject continuation", async () => {
+    const sessionApi = createFakeSessionApi()
+    let injectCalls = 0
+    sessionApi.injectPrompt = async () => {
+      injectCalls += 1
+
+      if (injectCalls <= MAX_CONSECUTIVE_FAILURES) {
+        throw new Error("boom")
+      }
+    }
+
+    const enforcer = createTodoContinuationEnforcer({
+      sessionApi,
+      logger: createFakeLogger(),
+      backgroundTaskProbe: createFakeBackgroundTaskProbe(),
+      countdownSeconds: 0,
+    })
+
+    for (let i = 0; i < MAX_CONSECUTIVE_FAILURES; i += 1) {
+      await enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+    }
+
+    await enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+
+    expect(injectCalls).toBe(MAX_CONSECUTIVE_FAILURES)
+  })
+
   it("session.deleted 在 countdown 期間會取消注入", async () => {
     clock = createControlledClock()
     const sessionApi = createFakeSessionApi()
@@ -534,6 +561,62 @@ describe("todo continuation enforcer integration", () => {
 
     await idle
     await clock.advance(5000)
+
+    expect(sessionApi.prompts).toHaveLength(0)
+    expect(toast.messages.some((message) => message.includes("stopped"))).toBe(true)
+  })
+
+  it("countdown 結束後、inject 前 cancelPendingWork 會阻止最終注入", async () => {
+    clock = createControlledClock()
+    let resolveFreshTodos!: () => void
+    const freshTodosReady = new Promise<void>((resolve) => {
+      resolveFreshTodos = resolve
+    })
+    let getTodosCalls = 0
+    const sessionApi = {
+      prompts: [] as string[],
+      abortCalls: [] as string[],
+      async getTodos() {
+        getTodosCalls += 1
+
+        if (getTodosCalls === 1) {
+          return [{ content: "finish", status: "pending" as const, priority: "high" as const }]
+        }
+
+        await freshTodosReady
+        return [{ content: "finish", status: "pending" as const, priority: "high" as const }]
+      },
+      async getLatestMessageInfo() {
+        return {
+          agent: "sisyphus",
+          model: { providerID: "openai", modelID: "gpt-5" },
+          parts: [{ type: "text", text: "keep going" }],
+        }
+      },
+      async injectPrompt(sessionID: string, prompt: string) {
+        sessionApi.prompts.push(prompt)
+      },
+      async abort(sessionID: string) {
+        sessionApi.abortCalls.push(sessionID)
+      },
+    } as any
+
+    const toast = createFakeCountdownToast()
+    const enforcer = createTodoContinuationEnforcer({
+      sessionApi,
+      logger: createFakeLogger(),
+      backgroundTaskProbe: createFakeBackgroundTaskProbe(),
+      toast,
+      countdownSeconds: 0.05,
+    })
+
+    const idle = enforcer.handleEvent({ type: "session.idle", sessionID: "s1" })
+    await clock.advance(50)
+
+    await expect(enforcer.cancelPendingWork("s1")).resolves.toEqual({ status: "cancelled" })
+    resolveFreshTodos()
+
+    await idle
 
     expect(sessionApi.prompts).toHaveLength(0)
     expect(toast.messages.some((message) => message.includes("stopped"))).toBe(true)

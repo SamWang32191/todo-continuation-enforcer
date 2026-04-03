@@ -9,7 +9,6 @@ import { isCompactionGuardActive } from "./compaction-guard"
 import type { SessionState, Todo } from "./types"
 
 export async function shouldContinueOnIdle(args: {
-  sessionID: string
   state: SessionState
   todos: Todo[]
   now: number

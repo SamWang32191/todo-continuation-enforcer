@@ -1,28 +1,9 @@
 import type { SessionState } from "./types"
 import type { CountdownToast } from "../plugin/adapters/toast"
+import { clearCountdownResources } from "./countdown-state"
 
 function formatCountdownMessage(seconds: number, incompleteCount: number): string {
   return `Resuming in ${seconds}s... (${incompleteCount} tasks remaining)`
-}
-
-function clearCountdownState(state?: SessionState): void {
-  if (!state) {
-    return
-  }
-
-  if (state.countdownTimer) {
-    clearTimeout(state.countdownTimer)
-    state.countdownTimer = undefined
-  }
-
-  if (state.countdownInterval) {
-    clearInterval(state.countdownInterval)
-    state.countdownInterval = undefined
-  }
-
-  if (state.countdownCancel) {
-    state.countdownCancel = undefined
-  }
 }
 
 export async function runCountdown(args: {
@@ -40,7 +21,7 @@ export async function runCountdown(args: {
     let remaining = args.seconds
 
     const cleanup = (): void => {
-      clearCountdownState(args.state)
+      clearCountdownResources(args.state)
     }
 
     const complete = (value: boolean): void => {

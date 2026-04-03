@@ -1,4 +1,5 @@
 import type { SessionState } from "./types"
+import { cancelCountdownState } from "./countdown-state"
 
 export class SessionStateStore {
   private readonly states = new Map<string, SessionState>()
@@ -10,7 +11,7 @@ export class SessionStateStore {
       return existing
     }
 
-    const state = this.createState(sessionId)
+    const state = this.createState()
     this.states.set(sessionId, state)
     return state
   }
@@ -24,7 +25,7 @@ export class SessionStateStore {
     this.states.delete(sessionId)
   }
 
-  private createState(sessionId: string): SessionState {
+  private createState(): SessionState {
     return {
       lastIncompleteCount: 0,
       lastInjectedAt: undefined,
@@ -42,21 +43,7 @@ export class SessionStateStore {
       return
     }
 
-    if (state.countdownTimer) {
-      clearTimeout(state.countdownTimer)
-      state.countdownTimer = undefined
-    }
-
-    if (state.countdownCancel) {
-      state.countdownCancel()
-      state.countdownCancel = undefined
-    }
-
-    if (state.countdownInterval) {
-      clearInterval(state.countdownInterval)
-      state.countdownInterval = undefined
-    }
-
+    cancelCountdownState(state)
     state.pendingContinuation = false
   }
 }

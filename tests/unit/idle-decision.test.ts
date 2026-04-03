@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 
+import { MAX_CONSECUTIVE_FAILURES } from "../../src/todo-continuation-enforcer/constants"
 import { shouldContinueOnIdle } from "../../src/todo-continuation-enforcer/idle-event"
 import type { SessionState } from "../../src/todo-continuation-enforcer/types"
 
@@ -11,7 +12,6 @@ describe("shouldContinueOnIdle", () => {
 
   it("允許通過所有 gate", async () => {
     const result = await shouldContinueOnIdle({
-      sessionID: "s1",
       state: baseState(),
       todos: [{ content: "finish", status: "pending", priority: "high" }],
       now: 10_000,
@@ -26,7 +26,6 @@ describe("shouldContinueOnIdle", () => {
 
   it("pending question 會阻擋", async () => {
     const result = await shouldContinueOnIdle({
-      sessionID: "s1",
       state: baseState(),
       todos: [{ content: "finish", status: "pending", priority: "high" }],
       now: 10_000,
@@ -42,7 +41,6 @@ describe("shouldContinueOnIdle", () => {
 
   it("cooldown 會阻擋", async () => {
     const result = await shouldContinueOnIdle({
-      sessionID: "s1",
       state: { ...baseState(), lastInjectedAt: 9_500 },
       todos: [{ content: "finish", status: "pending", priority: "high" }],
       now: 10_000,
@@ -58,7 +56,6 @@ describe("shouldContinueOnIdle", () => {
 
   it("recent abort 會阻擋", async () => {
     const result = await shouldContinueOnIdle({
-      sessionID: "s1",
       state: { ...baseState(), abortDetectedAt: 9_500 },
       todos: [{ content: "finish", status: "pending", priority: "high" }],
       now: 10_000,
@@ -74,7 +71,6 @@ describe("shouldContinueOnIdle", () => {
 
   it("skip agent 會阻擋", async () => {
     const result = await shouldContinueOnIdle({
-      sessionID: "s1",
       state: baseState(),
       todos: [{ content: "finish", status: "pending", priority: "high" }],
       now: 10_000,
@@ -91,7 +87,6 @@ describe("shouldContinueOnIdle", () => {
 
   it("compaction guard 會阻擋", async () => {
     const result = await shouldContinueOnIdle({
-      sessionID: "s1",
       state: { ...baseState(), recentCompactionAt: 9_500 },
       todos: [{ content: "finish", status: "pending", priority: "high" }],
       now: 10_000,
@@ -103,5 +98,20 @@ describe("shouldContinueOnIdle", () => {
 
     expect(result.shouldInject).toBe(false)
     expect(result.reason).toBe("compaction_guard")
+  })
+
+  it("too_many_failures 會阻擋", async () => {
+    const result = await shouldContinueOnIdle({
+      state: { ...baseState(), consecutiveFailures: MAX_CONSECUTIVE_FAILURES },
+      todos: [{ content: "finish", status: "pending", priority: "high" }],
+      now: 10_000,
+      hasPendingQuestion: false,
+      hasRunningBackgroundTask: false,
+      isContinuationStopped: false,
+      agent: "sisyphus",
+    })
+
+    expect(result.shouldInject).toBe(false)
+    expect(result.reason).toBe("too_many_failures")
   })
 })
