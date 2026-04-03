@@ -14,7 +14,7 @@ import { SessionStateStore } from "./session-state"
 import { commitStagnationState, previewStagnationState } from "./stagnation-detection"
 
 export type ContinuationEvent = {
-  type: "session.idle" | "session.error" | "session.deleted" | "session.compacted" | "session.interrupt"
+  type: "session.idle" | "session.error" | "session.deleted" | "session.compacted" | "session.interrupt" | "session.stop"
   sessionID: string
   error?: { name?: string }
 }
@@ -22,6 +22,8 @@ export type ContinuationEvent = {
 export type CancelNextContinuationResult = {
   status: "cancelled" | "no_pending"
 }
+
+export type CancelPendingWorkResult = CancelNextContinuationResult
 
 export function createTodoContinuationHandler(args: {
   sessionApi: SessionApi
@@ -31,6 +33,7 @@ export function createTodoContinuationHandler(args: {
   toast: CountdownToast
   countdownSeconds: number
   skipAgents?: string[]
+  isContinuationStopped?: (sessionID: string) => boolean
 }) {
   const stateStore = new SessionStateStore()
 
@@ -46,12 +49,16 @@ export function createTodoContinuationHandler(args: {
         return { status: "no_pending" }
       }
 
-      state.continuationStopped = true
       state.pendingContinuation = false
       state.countdownCancel?.()
-      await args.toast.showCancelled("Next continuation cancelled.")
+      state.countdownCancel = undefined
+      await args.toast.showCancelled("Continuation stopped.")
 
       return { status: "cancelled" }
+    },
+
+    async cancelPendingWork(sessionID: string): Promise<CancelPendingWorkResult> {
+      return this.cancelNextContinuation(sessionID)
     },
 
     async handleEvent(event: ContinuationEvent): Promise<void> {
@@ -92,13 +99,15 @@ export function createTodoContinuationHandler(args: {
         return
       }
 
+      if (args.isContinuationStopped?.(event.sessionID)) {
+        return
+      }
+
       if (state.inFlight) {
         return
       }
 
       state.inFlight = true
-      state.countdownStartedAt = Date.now()
-
       try {
         const now = Date.now()
         const todos = await args.sessionApi.getTodos(event.sessionID)
@@ -115,7 +124,7 @@ export function createTodoContinuationHandler(args: {
           now,
           hasPendingQuestion: hasPendingQuestion(messageInfo),
           hasRunningBackgroundTask: args.backgroundTaskProbe.hasRunningTask(event.sessionID),
-          isContinuationStopped: Boolean(state.continuationStopped),
+          isContinuationStopped: args.isContinuationStopped?.(event.sessionID) ?? false,
           agent: messageInfo?.agent,
           skipAgents: args.skipAgents,
         })
@@ -135,6 +144,10 @@ export function createTodoContinuationHandler(args: {
           return
         }
 
+        if (args.isContinuationStopped?.(event.sessionID)) {
+          return
+        }
+
         state.pendingContinuation = true
 
         const countdownCompleted = await runCountdown({
@@ -145,6 +158,10 @@ export function createTodoContinuationHandler(args: {
         })
 
         if (!countdownCompleted || !stateStore.getExistingState(event.sessionID)) {
+          return
+        }
+
+        if (args.isContinuationStopped?.(event.sessionID)) {
           return
         }
 
@@ -162,7 +179,7 @@ export function createTodoContinuationHandler(args: {
           now: Date.now(),
           hasPendingQuestion: hasPendingQuestion(freshMessageInfo),
           hasRunningBackgroundTask: args.backgroundTaskProbe.hasRunningTask(event.sessionID),
-          isContinuationStopped: Boolean(state.continuationStopped),
+          isContinuationStopped: args.isContinuationStopped?.(event.sessionID) ?? false,
           agent: freshMessageInfo?.agent,
           skipAgents: args.skipAgents,
         })
@@ -172,8 +189,7 @@ export function createTodoContinuationHandler(args: {
           return
         }
 
-        if (state.continuationStopped) {
-          args.logger.debug("skip continuation due to user cancel", { sessionID: event.sessionID })
+        if (args.isContinuationStopped?.(event.sessionID)) {
           return
         }
 
@@ -189,7 +205,6 @@ export function createTodoContinuationHandler(args: {
 
         commitStagnationState(state, stagnationPreview)
         state.lastInjectedAt = Date.now()
-        state.awaitingPostInjectionProgressCheck = true
         state.consecutiveFailures = 0
       } catch (error) {
         state.consecutiveFailures += 1
@@ -201,7 +216,6 @@ export function createTodoContinuationHandler(args: {
         if (stateStore.getExistingState(event.sessionID)) {
           state.inFlight = false
           state.countdownCancel = undefined
-          state.continuationStopped = false
           state.pendingContinuation = false
         }
       }

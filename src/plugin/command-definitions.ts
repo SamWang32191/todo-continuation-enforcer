@@ -1,12 +1,14 @@
-export const CANCEL_NEXT_CONTINUATION_COMMAND_NAME = "cancel-next-continuation"
+export const STOP_CONTINUATION_COMMAND_NAME = "stop-continuation"
 
-const CANCEL_NEXT_CONTINUATION_TEMPLATE = `Cancel the next pending continuation injection for the current session.
+const STOP_CONTINUATION_TEMPLATE = `Stop continuation for the current session.
 
-Use the internal \`cancel_next_continuation\` tool to perform the cancellation.
+Use the internal \`stop_continuation\` tool to stop continuation for this session.
 
 - Prefer the current session context when available.
-- If the tool reports there is no pending continuation, tell the user plainly.
-- If the tool reports cancellation succeeded, confirm that the next continuation was cancelled.`
+- Abort the active session run when continuation is stopped.
+- Continuation remains stopped until a new user message arrives.
+- If continuation is already stopped, return success and keep it stopped.
+- Confirm that continuation is stopped for this session.`
 
 export type CommandDefinition = {
   name: string
@@ -16,11 +18,11 @@ export type CommandDefinition = {
 
 export function getBuiltinCommands(): Record<string, CommandDefinition> {
   return {
-    [CANCEL_NEXT_CONTINUATION_COMMAND_NAME]: {
-      name: CANCEL_NEXT_CONTINUATION_COMMAND_NAME,
-      description: "(builtin) Cancel the next pending continuation injection",
+    [STOP_CONTINUATION_COMMAND_NAME]: {
+      name: STOP_CONTINUATION_COMMAND_NAME,
+      description: "(builtin) Stop continuation for the current session",
       template: `<command-instruction>
-${CANCEL_NEXT_CONTINUATION_TEMPLATE}
+${STOP_CONTINUATION_TEMPLATE}
 </command-instruction>`,
     },
   }

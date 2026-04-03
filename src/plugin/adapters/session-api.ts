@@ -34,6 +34,7 @@ export interface SessionApi {
       model?: { providerID: string; modelID: string }
     },
   ): Promise<void>
+  abort(sessionID: string): Promise<void>
 }
 
 type SdkMessage = {
@@ -210,6 +211,12 @@ export function createSdkSessionApi(ctx: PluginInput): SessionApi {
           model: options?.model,
           parts: [{ type: "text", text: prompt }],
         },
+      })
+    },
+    async abort(sessionID) {
+      await ctx.client.session.abort({
+        path: { id: sessionID },
+        query: { directory: ctx.directory },
       })
     },
   }
